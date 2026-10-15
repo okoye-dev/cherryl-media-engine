@@ -42,6 +42,7 @@ func main() {
 	var articleStore store.ArticleStore
 	var uploadStore store.UploadStore
 	var userStore store.UserStore
+	var settingsStore store.SettingsStore
 
 	if cfg.Database.URL != "" {
 		ctx := context.Background()
@@ -64,6 +65,7 @@ func main() {
 		articleStore = pg
 		uploadStore = pg
 		userStore = pg
+		settingsStore = pg
 
 		// Seed PostgreSQL with canonical articles and default admin if not already present
 		if err := seed.Run(ctx, pg); err != nil {
@@ -74,6 +76,7 @@ func main() {
 		articleStore = mem
 		uploadStore = mem
 		userStore = mem
+		settingsStore = mem
 
 		// Seed Memory store
 		if err := seed.Run(context.Background(), mem); err != nil {
@@ -102,6 +105,7 @@ func main() {
 	articleHandler := handlers.NewArticleHandler(articleStore, s3Storage)
 	uploadHandler := handlers.NewUploadHandler(s3Storage, uploadStore)
 	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret, cfg.Supabase)
+	settingsHandler := handlers.NewSettingsHandler(settingsStore)
 
 	// Authentication routes
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
@@ -115,6 +119,11 @@ func main() {
 	mux.HandleFunc("POST /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("PUT /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("GET /api/links/resolve", articleHandler.ResolveLink)
+
+	// Site settings & configurable copy routes
+	mux.HandleFunc("GET /api/settings", settingsHandler.GetSettings)
+	mux.HandleFunc("POST /api/settings", settingsHandler.UpdateSettings)
+	mux.HandleFunc("PUT /api/settings", settingsHandler.UpdateSettings)
 
 	// AI discovery candidates and sources routes
 	mux.HandleFunc("GET /api/candidates", articleHandler.ListCandidates)

@@ -40,6 +40,12 @@ type UploadStore interface {
 	ConfirmUpload(ctx context.Context, key string, size int64, publicURL string) error
 }
 
+type SettingsStore interface {
+	GetSetting(ctx context.Context, key string) ([]byte, error)
+	SetSetting(ctx context.Context, key string, val []byte) error
+	GetAllSettings(ctx context.Context) (map[string]any, error)
+}
+
 type PGStore struct {
 	pool *pgxpool.Pool
 }
@@ -548,6 +554,50 @@ func (s *PGStore) CreateUser(ctx context.Context, u *auth.User, passwordHash str
 	return err
 }
 
+func (s *PGStore) GetSetting(ctx context.Context, key string) ([]byte, error) {
+	row := s.pool.QueryRow(ctx, "SELECT value FROM site_settings WHERE key = $1", key)
+	var val []byte
+	err := row.Scan(&val)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return val, err
+}
+
+func (s *PGStore) SetSetting(ctx context.Context, key string, val []byte) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO site_settings (key, value, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (key) DO UPDATE
+		SET value = EXCLUDED.value, updated_at = NOW()
+	`, key, val)
+	return err
+}
+
+func (s *PGStore) GetAllSettings(ctx context.Context) (map[string]any, error) {
+	rows, err := s.pool.Query(ctx, "SELECT key, value FROM site_settings")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make(map[string]any)
+	for rows.Next() {
+		var k string
+		var raw []byte
+		if err := rows.Scan(&k, &raw); err != nil {
+			return nil, err
+		}
+		var parsed any
+		if err := json.Unmarshal(raw, &parsed); err == nil {
+			res[k] = parsed
+		} else {
+			res[k] = string(raw)
+		}
+	}
+	return res, rows.Err()
+}
+
 type MemoryStore struct {
 	mu         sync.RWMutex
 	articles   map[string]models.Article
@@ -556,6 +606,7 @@ type MemoryStore struct {
 	uploads    map[string]string
 	users      map[string]*auth.User
 	passwords  map[string]string
+	settings   map[string][]byte
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -565,6 +616,7 @@ func NewMemoryStore() *MemoryStore {
 		uploads:    make(map[string]string),
 		users:      make(map[string]*auth.User),
 		passwords:  make(map[string]string),
+		settings:   make(map[string][]byte),
 	}
 
 	// Default development admin credentials
@@ -872,3 +924,36 @@ func (m *MemoryStore) CreateUser(ctx context.Context, u *auth.User, passwordHash
 	m.passwords[u.Email] = passwordHash
 	return nil
 }
+
+func (m *MemoryStore) GetSetting(ctx context.Context, key string) ([]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	val, ok := m.settings[key]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return val, nil
+}
+
+func (m *MemoryStore) SetSetting(ctx context.Context, key string, val []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.settings[key] = val
+	return nil
+}
+
+func (m *MemoryStore) GetAllSettings(ctx context.Context) (map[string]any, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	res := make(map[string]any)
+	for k, raw := range m.settings {
+		var parsed any
+		if err := json.Unmarshal(raw, &parsed); err == nil {
+			res[k] = parsed
+		} else {
+			res[k] = string(raw)
+		}
+	}
+	return res, nil
+}
+
