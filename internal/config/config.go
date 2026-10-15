@@ -12,11 +12,26 @@ type Config struct {
 	JWTSecret      string
 	AllowedOrigins []string
 	Database       DatabaseConfig
+	Supabase       SupabaseConfig
 	S3             S3Config
 }
 
 type DatabaseConfig struct {
 	URL string
+}
+
+type SupabaseConfig struct {
+	URL            string
+	JWKSURL        string
+	KeyID          string
+	PublicKeyX     string
+	PublicKeyY     string
+	PublishableKey string
+	SecretKey      string
+}
+
+func (s *SupabaseConfig) IsAuthEnabled() bool {
+	return s.JWKSURL != "" || (s.PublicKeyX != "" && s.PublicKeyY != "")
 }
 
 type S3Config struct {
@@ -37,10 +52,19 @@ func (s *S3Config) IsConfigured() bool {
 func Load() *Config {
 	cfg := &Config{
 		Port:           getEnv("PORT", "8080"),
-		JWTSecret:      getEnv("JWT_SECRET", "cherryl_default_dev_secret_2026_change_in_production"),
+		JWTSecret:      getEnv("JWT_SECRET", ""),
 		AllowedOrigins: getEnvList("ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"}),
 		Database: DatabaseConfig{
 			URL: getEnv("DATABASE_URL", ""),
+		},
+		Supabase: SupabaseConfig{
+			URL:            getEnv("SUPABASE_URL", ""),
+			JWKSURL:        getEnv("SUPABASE_JWKS_URL", ""),
+			KeyID:          getEnv("SUPABASE_JWT_KEY_ID", ""),
+			PublicKeyX:     getEnv("SUPABASE_JWT_PUBLIC_KEY_X", ""),
+			PublicKeyY:     getEnv("SUPABASE_JWT_PUBLIC_KEY_Y", ""),
+			PublishableKey: getEnv("SUPABASE_PUBLISHABLE_KEY", ""),
+			SecretKey:      getEnv("SUPABASE_SECRET_KEY", ""),
 		},
 		S3: S3Config{
 			Endpoint:        getEnv("S3_ENDPOINT", ""),
@@ -64,6 +88,10 @@ func Load() *Config {
 		log.Println("PostgreSQL database URL configured")
 	} else {
 		log.Println("DATABASE_URL not set. Running with local in-memory store.")
+	}
+
+	if cfg.Supabase.IsAuthEnabled() {
+		log.Printf("Supabase ECC Auth configured: discovery=%s kid=%s", cfg.Supabase.JWKSURL, cfg.Supabase.KeyID)
 	}
 
 	return cfg

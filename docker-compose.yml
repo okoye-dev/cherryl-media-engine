@@ -12,7 +12,7 @@ services:
     environment:
       - PORT=8080
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
-      - JWT_SECRET=${JWT_SECRET:-cherryl_super_secret_jwt_key_2026_change_me}
+      - JWT_SECRET=${JWT_SECRET:-}
       - DATABASE_URL=${DATABASE_URL:-}
       # Cloudflare R2 / S3 Storage Credentials
       - S3_ENDPOINT=${S3_ENDPOINT:-}

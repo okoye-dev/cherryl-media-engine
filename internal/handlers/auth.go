@@ -118,14 +118,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.userStore.GetUserByID(r.Context(), claims.UserID)
 	if err != nil {
-		// Fallback to claims if user record not found in DB
-		user = &auth.User{
-			ID:       claims.UserID,
-			Email:    claims.Email,
-			FullName: claims.Name,
-			Role:     claims.Role,
-			Active:   true,
-		}
+		user = claims.ToUser()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

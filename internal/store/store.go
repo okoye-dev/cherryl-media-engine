@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/okoye-dev/cherryl-media-engine/internal/auth"
@@ -525,7 +526,7 @@ func NewMemoryStore() *MemoryStore {
 	// Default development admin credentials
 	initPass := os.Getenv("INITIAL_ADMIN_PASSWORD")
 	if initPass == "" {
-		initPass = "cherryl-dev-editor"
+		initPass = "cherry-" + uuid.New().String()[:8]
 	}
 	adminHash, _ := auth.HashPassword(initPass)
 	adminUser := &auth.User{

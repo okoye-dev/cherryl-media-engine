@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -14,11 +13,57 @@ import (
 type userContextKey struct{}
 
 type Claims struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
-	Role   string `json:"role"`
-	Name   string `json:"name"`
+	UserID       string                 `json:"user_id,omitempty"`
+	Email        string                 `json:"email,omitempty"`
+	Role         string                 `json:"role,omitempty"`
+	Name         string                 `json:"name,omitempty"`
+	UserMetadata map[string]interface{} `json:"user_metadata,omitempty"`
+	AppMetadata  map[string]interface{} `json:"app_metadata,omitempty"`
 	jwt.RegisteredClaims
+}
+
+func (c *Claims) ToUser() *User {
+	id := c.UserID
+	if id == "" {
+		id = c.Subject
+	}
+
+	name := c.Name
+	if name == "" && c.UserMetadata != nil {
+		if fn, ok := c.UserMetadata["full_name"].(string); ok && fn != "" {
+			name = fn
+		} else if n, ok := c.UserMetadata["name"].(string); ok && n != "" {
+			name = n
+		}
+	}
+
+	role := c.Role
+	if role == "" || role == "authenticated" {
+		if c.AppMetadata != nil {
+			if r, ok := c.AppMetadata["role"].(string); ok && r != "" {
+				role = r
+			}
+		}
+		if role == "" || role == "authenticated" {
+			if c.UserMetadata != nil {
+				if r, ok := c.UserMetadata["role"].(string); ok && r != "" {
+					role = r
+				}
+			}
+		}
+		if role == "" || role == "authenticated" {
+			role = "editor"
+		}
+	}
+
+	return &User{
+		ID:        id,
+		Email:     c.Email,
+		FullName:  name,
+		Role:      role,
+		Active:    true,
+		CreatedAt: time.Now().UTC(),
+	}
 }
 
 type User struct {
@@ -58,19 +103,12 @@ func GenerateToken(user *User, secret string, ttl time.Duration) (string, error)
 }
 
 func ParseToken(tokenStr, secret string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
-		}
-		return []byte(secret), nil
-	})
-	if err != nil {
-		return nil, err
+	if v := GetDefaultVerifier(); v != nil {
+		return v.VerifyToken(tokenStr)
 	}
-	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		return claims, nil
-	}
-	return nil, errors.New("invalid token")
+
+	v := NewTokenVerifier(secret, "")
+	return v.VerifyToken(tokenStr)
 }
 
 func ExtractToken(r *http.Request) string {
@@ -110,14 +148,7 @@ func RequireAuth(secret string, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		user := &User{
-			ID:       claims.UserID,
-			Email:    claims.Email,
-			FullName: claims.Name,
-			Role:     claims.Role,
-			Active:   true,
-		}
-
+		user := claims.ToUser()
 		next(w, WithUser(r, user))
 	}
 }

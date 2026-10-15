@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/okoye-dev/cherryl-media-engine/internal/auth"
 	"github.com/okoye-dev/cherryl-media-engine/internal/config"
 	"github.com/okoye-dev/cherryl-media-engine/internal/handlers"
 	"github.com/okoye-dev/cherryl-media-engine/internal/migrate"
@@ -78,6 +79,23 @@ func main() {
 		if err := seed.Run(context.Background(), mem); err != nil {
 			log.Printf("initial memory seeding warning: %v", err)
 		}
+	}
+
+	// Initialize Auth Verifier (supports local HMAC and Supabase ECC JWKS)
+	verifier := auth.InitDefaultVerifier(cfg.JWTSecret, cfg.Supabase.JWKSURL)
+	if cfg.Supabase.KeyID != "" && cfg.Supabase.PublicKeyX != "" && cfg.Supabase.PublicKeyY != "" {
+		if err := verifier.RegisterECKey(cfg.Supabase.KeyID, cfg.Supabase.PublicKeyX, cfg.Supabase.PublicKeyY); err != nil {
+			log.Printf("Warning: failed to register Supabase EC public key: %v", err)
+		} else {
+			log.Printf("Supabase ECC Auth registered: kid=%s", cfg.Supabase.KeyID)
+		}
+	}
+	if cfg.Supabase.JWKSURL != "" {
+		go func() {
+			if err := verifier.FetchJWKS(); err != nil {
+				log.Printf("JWKS discovery initial sync note: %v", err)
+			}
+		}()
 	}
 
 	mux := http.NewServeMux()
