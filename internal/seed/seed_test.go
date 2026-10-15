@@ -6,8 +6,8 @@ import (
 
 func TestGetAllWebsiteArticles(t *testing.T) {
 	arts := GetAllWebsiteArticles()
-	if len(arts) != 15 {
-		t.Fatalf("expected 15 articles, got %d", len(arts))
+	if len(arts) != 22 {
+		t.Fatalf("expected 22 articles, got %d", len(arts))
 	}
 
 	seenIDs := make(map[string]string)

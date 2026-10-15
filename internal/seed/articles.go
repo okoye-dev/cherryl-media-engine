@@ -816,5 +816,411 @@ func GetAllWebsiteArticles() []models.Article {
 			CreatedAt:   now,
 		},
 
+		// 16. National Climate Council Disburses First Tranche of Subnational Adaptation Grants
+		{
+			ID:           deterministicUUID("climate-resilience-act-subnational-adaptation-funds"),
+			Slug:         "climate-resilience-act-subnational-adaptation-funds",
+			Title:        "National Climate Council Disburses First Tranche of Subnational Adaptation Grants",
+			Kicker:       "CLIMATE GOVERNANCE · PUBLIC POLICY",
+			Deck:         "Sixteen ecological disaster-vulnerable states receive targeted matching capital for flood plain defense, mangrove restoration, and municipal drainage infrastructure.",
+			Category:     models.PillarCategory("nigerian-current-affairs"),
+			CategoryName: "Nigerian Current Affairs",
+			Author: models.Author{
+				Name: "Amina Bello",
+				Role: "Environment & Policy Desk",
+			},
+			FeaturedImage: models.FeaturedImage{
+				StorageKey: "media/1b8e4f20-9111-5333-8222-777788889999.webp",
+				URL:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/1b8e4f20-9111-5333-8222-777788889999.webp",
+				Caption:    "Ecological remediation and flood barrier construction works across frontline subnational zones.",
+				Credit:     "National Climate Secretariat",
+			},
+			ReadTime: "4 min read",
+			Status:   models.StatusPublished,
+			Tags:     []string{"Climate", "Policy", "Infrastructure", "Ecology", "Governance"},
+			Excerpt:  "The National Climate Council has finalized disbursement modalities for subnational ecological defense funds, pairing sovereign capital with international matching grants.",
+			Body: []models.ContentBlock{
+				{
+					Type: "paragraph",
+					IsDropCap: true,
+					Text: "The National Climate Council has commenced disbursement of the initial tranche of sovereign ecological adaptation grants to sixteen vulnerable coastal and riverine states. Under the matching framework ratified during the inter-ministerial climate summit in Abuja, recipient states will direct liquidity toward concrete embankment construction, watershed stabilization, and automated early flood warning telemetry.",
+				},
+				{
+					Type: "quote",
+					Quote: "Resilience capital is no longer theoretical. Subnational governments now possess direct financing corridors to protect vulnerable agricultural and municipal belts before the peak seasonal rainfall.",
+					Author: "Dr. Salisu Dahiru",
+					Context: "Director-General, National Council on Climate Change",
+				},
+				{
+					Type: "paragraph",
+					Text: "State governments in the Niger Delta and along the Benue River basin have established dedicated fiduciary trust accounts to ensure transparent procurement and real-time public tracking of flood barrier construction contracts.",
+				},
+			},
+			Sources: []models.SourceCitation{
+				{
+					SourceName:   "National Council on Climate Change",
+					URL:          "https://natccc.gov.ng",
+					PublishedAt:  "2026-10-14T10:00:00Z",
+					ClaimSummary: "Subnational adaptation fund allocation guidelines.",
+				},
+			},
+			SocialVariants: models.SocialVariants{
+				X:          "CLIMATE POLICY: 16 states receive first tranche of subnational climate adaptation capital for flood protection and watershed resilience 🌊🛡️",
+				Facebook:   "The National Climate Council disburses matching grants for municipal flood defenses and coastal protection across 16 states.",
+				LinkedIn:   "Ecological Governance: Subnational climate financing corridors operationalized across Nigeria.",
+				Newsletter: "Policy Dispatch: First tranche of subnational adaptation funds released.",
+			},
+			PublishedAt: now,
+			CreatedAt:   now,
+		},
+
+		// 17. Federal Road Safety Corps Mandates Digital Passenger Manifests for Commercial Corridors
+		{
+			ID:           deterministicUUID("interstate-transit-digital-manifest-enforcement"),
+			Slug:         "interstate-transit-digital-manifest-enforcement",
+			Title:        "Federal Road Safety Corps Mandates Digital Passenger Manifests for Commercial Corridors",
+			Kicker:       "TRANSIT REGULATIONS · PUBLIC SAFETY",
+			Deck:         "Interstate transport operators must migrate paper logbooks to real-time QR passenger verification systems by mid-quarter to ensure rapid passenger welfare coverage.",
+			Category:     models.PillarCategory("practical-nigerian-updates"),
+			CategoryName: "Practical Nigerian Updates",
+			Author: models.Author{
+				Name: "Chuka Obi",
+				Role: "Public Service Correspondent",
+			},
+			FeaturedImage: models.FeaturedImage{
+				StorageKey: "media/2c9f5a31-9222-5444-8333-888899990000.webp",
+				URL:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/2c9f5a31-9222-5444-8333-888899990000.webp",
+				Caption:    "Digital ticketing scanners and manifest verification stations at intercity transit terminals.",
+				Credit:     "FRSC Transport Safety Division",
+			},
+			ReadTime: "3 min read",
+			Status:   models.StatusPublished,
+			Tags:     []string{"Transport", "FRSC", "Public Safety", "Transit", "Digital Service"},
+			Excerpt:  "Commercial motor park operators across all 36 states now face nationwide compliance checks on digital passenger manifests under newly gazetted safety regulations.",
+			Body: []models.ContentBlock{
+				{
+					Type: "paragraph",
+					IsDropCap: true,
+					Text: "The Federal Road Safety Corps (FRSC) has announced full enforcement timelines for the National Digital Passenger Manifest System (NDPMS), mandating commercial fleet operators to discard manual paper logs in favor of encrypted cloud manifests.",
+				},
+				{
+					Type: "quote",
+					Quote: "In the event of an emergency on federal highways, immediate digital identification and verified next-of-kin notification are essential legal rights for every commuter.",
+					Author: "Shehu Mohammed",
+					Context: "Corps Marshal, FRSC",
+				},
+				{
+					Type: "paragraph",
+					Text: "Passengers booking intercity buses via registered terminals will now receive an automated SMS verification ticket containing route insurance data and direct emergency helpline links before vehicle departure.",
+				},
+			},
+			Sources: []models.SourceCitation{
+				{
+					SourceName:   "Federal Road Safety Corps Gazette",
+					URL:          "https://frsc.gov.ng",
+					PublishedAt:  "2026-10-13T12:00:00Z",
+					ClaimSummary: "Mandatory transit passenger manifest guidelines.",
+				},
+			},
+			SocialVariants: models.SocialVariants{
+				X:          "TRANSIT UPDATE: FRSC mandates cloud passenger manifests for all commercial interstate buses. Paper registers phased out 🚌📋",
+				Facebook:   "Commercial interstate commuters will now verify manifests digitally via SMS and QR codes under new FRSC safety rules.",
+				LinkedIn:   "Transportation Policy: Digital manifest integration across commercial transit corridors.",
+				Newsletter: "Practical Update: Cloud-verified passenger manifests mandated nationwide.",
+			},
+			PublishedAt: now,
+			CreatedAt:   now,
+		},
+
+		// 18. Standards Organisation of Nigeria Issues Mandatory Safety Labels for Residential Solar Kits
+		{
+			ID:           deterministicUUID("son-mandates-component-certification-for-rooftop-solar"),
+			Slug:         "son-mandates-component-certification-for-rooftop-solar",
+			Title:        "Standards Organisation of Nigeria Issues Mandatory Safety Labels for Residential Solar Kits",
+			Kicker:       "CONSUMER ADVISORY · ENERGY",
+			Deck:         "Inverters, lithium iron phosphate battery packs, and photovoltaic panels must carry tamper-proof holographic verification seals starting next month.",
+			Category:     models.PillarCategory("practical-nigerian-updates"),
+			CategoryName: "Practical Nigerian Updates",
+			Author: models.Author{
+				Name: "Tunde Oladipo",
+				Role: "Senior Policy Correspondent",
+			},
+			FeaturedImage: models.FeaturedImage{
+				StorageKey: "media/3d0a6b42-9333-5555-8444-999900001111.webp",
+				URL:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/3d0a6b42-9333-5555-8444-999900001111.webp",
+				Caption:    "Certified rooftop photovoltaic and battery inverter installation on a residential estate in Abuja.",
+				Credit:     "SON Energy Standards Bureau",
+			},
+			ReadTime: "4 min read",
+			Status:   models.StatusPublished,
+			Tags:     []string{"Solar", "SON", "Energy", "Consumer Protection", "Utilities"},
+			Excerpt:  "SON has unveiled tightened anti-counterfeiting benchmarks for renewable energy hardware to curb substandard battery imports and safeguard residential consumers.",
+			Body: []models.ContentBlock{
+				{
+					Type: "paragraph",
+					IsDropCap: true,
+					Text: "The Standards Organisation of Nigeria (SON) has directed all solar component distributors and importers to apply mandatory QR verification seals on inverters, battery management systems, and monocrystalline solar modules.",
+				},
+				{
+					Type: "quote",
+					Quote: "Nigerian households investing their hard-earned money in clean off-grid energy deserve genuine, tested components with verifiable warranty backing.",
+					Author: "Dr. Ifeanyi Okeke",
+					Context: "Director-General, Standards Organisation of Nigeria",
+				},
+				{
+					Type: "paragraph",
+					Text: "Consumers can verify equipment authenticity directly at point of sale by scanning the tamper-evident holographic seal using the SON mobile app or SMS shortcode.",
+				},
+			},
+			Sources: []models.SourceCitation{
+				{
+					SourceName:   "Standards Organisation of Nigeria Press Briefing",
+					URL:          "https://son.gov.ng",
+					PublishedAt:  "2026-10-12T14:30:00Z",
+					ClaimSummary: "Rooftop solar and storage product certification standards.",
+				},
+			},
+			SocialVariants: models.SocialVariants{
+				X:          "SOLAR SAFETY: SON mandates holographic QR verification seals on all inverters and lithium batteries to protect consumers from fake hardware ☀️🔋",
+				Facebook:   "Buying a solar inverter or lithium battery? Check for the new SON holographic verification seal before paying.",
+				LinkedIn:   "Clean Tech Standards: Regulatory compliance requirements for solar equipment importers in Nigeria.",
+				Newsletter: "Consumer Advisory: How to verify your rooftop solar hardware under new SON rules.",
+			},
+			PublishedAt: now,
+			CreatedAt:   now,
+		},
+
+		// 19. Institutional Investors Drive $450M Inflows into High-Yield Real Estate Investment Trusts
+		{
+			ID:           deterministicUUID("dual-listed-reits-unlock-commercial-property-liquidity"),
+			Slug:         "dual-listed-reits-unlock-commercial-property-liquidity",
+			Title:        "Institutional Investors Drive $450M Inflows into High-Yield Real Estate Investment Trusts",
+			Kicker:       "CAPITAL MARKETS · REAL ESTATE",
+			Deck:         "Grade-A commercial office towers and logistics warehouses across Victoria Island and Ikeja join dual-currency REIT platforms yielding inflation-hedged dividends.",
+			Category:     models.PillarCategory("business-institutions"),
+			CategoryName: "Business & Institutions",
+			Author: models.Author{
+				Name: "Emeka Nnamani",
+				Role: "Financial Markets Editor",
+			},
+			FeaturedImage: models.FeaturedImage{
+				StorageKey: "media/4e1b7c53-9444-5666-8555-000011112222.webp",
+				URL:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/4e1b7c53-9444-5666-8555-000011112222.webp",
+				Caption:    "Prime commercial property skyline along Victoria Island's financial boulevard.",
+				Credit:     "Nigerian Exchange Group Media",
+			},
+			ReadTime: "5 min read",
+			Status:   models.StatusPublished,
+			Tags:     []string{"REITs", "Real Estate", "NGX", "Investments", "Capital Markets"},
+			Excerpt:  "Commercial real estate developers in Lagos and Abuja are securitizing warehouse and logistics footprints into high-performing investment trusts trading on the Nigerian Exchange.",
+			Body: []models.ContentBlock{
+				{
+					Type: "paragraph",
+					IsDropCap: true,
+					Text: "Institutional asset managers and pension fund administrators have committed over $450 million in newly structured Real Estate Investment Trusts (REITs) listed on the Nigerian Exchange, signaling renewed appetite for tangible commercial yield.",
+				},
+				{
+					Type: "quote",
+					Quote: "REIT securitization unlocks locked-up corporate balance sheet value while providing institutional funds with robust rental yields indexed to economic productivity.",
+					Author: "Temi Popoola",
+					Context: "Group CEO, Nigerian Exchange Group",
+				},
+				{
+					Type: "paragraph",
+					Text: "The portfolio listings encompass cold-chain distribution centers in Sagamu, Grade-A financial towers in Lagos, and specialized fulfillment logistics centers catering to West Africa's e-commerce volume.",
+				},
+			},
+			Sources: []models.SourceCitation{
+				{
+					SourceName:   "Nigerian Exchange Group Markets Bulletin",
+					URL:          "https://ngxgroup.com",
+					PublishedAt:  "2026-10-14T11:00:00Z",
+					ClaimSummary: "Commercial REIT listings and capital flows report.",
+				},
+			},
+			SocialVariants: models.SocialVariants{
+				X:          "REAL ESTATE FINANCE: $450M committed to commercial REITs on the NGX. Prime logistics and prime office portfolios lead the yield surge 🏢📈",
+				Facebook:   "Commercial property securitization hits record milestone as pension funds channel capital into listed REITs.",
+				LinkedIn:   "Capital Markets: Institutional liquidity flows into West African commercial property trusts.",
+				Newsletter: "Markets Brief: How dual-listed REITs are unlocking real estate liquidity.",
+			},
+			PublishedAt: now,
+			CreatedAt:   now,
+		},
+
+		// 20. PenCom Approves 25% RSA Balance Drawdown for First-Time Residential Mortgages
+		{
+			ID:           deterministicUUID("pencom-guidelines-allow-pension-equity-for-primary-mortgages"),
+			Slug:         "pencom-guidelines-allow-pension-equity-for-primary-mortgages",
+			Title:        "PenCom Approves 25% RSA Balance Drawdown for First-Time Residential Mortgages",
+			Kicker:       "RETIREMENT REFORM · HOUSING",
+			Deck:         "Thousands of salaried young professionals tap retirement savings accounts as verified primary equity contributions for long-term residential housing loans.",
+			Category:     models.PillarCategory("business-institutions"),
+			CategoryName: "Business & Institutions",
+			Author: models.Author{
+				Name: "Emeka Nnamani",
+				Role: "Financial Markets Editor",
+			},
+			FeaturedImage: models.FeaturedImage{
+				StorageKey: "media/5f2c8d64-9555-5777-8666-111122223333.webp",
+				URL:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/5f2c8d64-9555-5777-8666-111122223333.webp",
+				Caption:    "Newly completed master-planned residential housing development financed via pension-backed mortgages.",
+				Credit:     "Federal Mortgage Bank Archive",
+			},
+			ReadTime: "4 min read",
+			Status:   models.StatusPublished,
+			Tags:     []string{"PenCom", "Mortgage", "Pensions", "Housing", "Personal Finance"},
+			Excerpt:  "PenCom's updated operational framework simplifies the process for retirement savings account holders to access up to a quarter of their balance for residential down payments.",
+			Body: []models.ContentBlock{
+				{
+					Type: "paragraph",
+					IsDropCap: true,
+					Text: "The National Pension Commission (PenCom) has streamlined regulatory prerequisites for RSA contributors seeking to utilize up to 25 percent of their accumulated pension balance as equity contribution for residential mortgage loans.",
+				},
+				{
+					Type: "quote",
+					Quote: "Housing security is a foundational pillar of retirement peace of mind. Allowing early equity access creates tangible lifetime wealth for contributors during their peak earning years.",
+					Author: "Omolola Oloworaran",
+					Context: "Director-General, PenCom",
+				},
+				{
+					Type: "paragraph",
+					Text: "Over 34 primary mortgage institutions and commercial banks have integrated digital application verification portals directly with PenCom's contributor registry, reducing clearance turnaround from 90 days to under three weeks.",
+				},
+			},
+			Sources: []models.SourceCitation{
+				{
+					SourceName:   "National Pension Commission Circular",
+					URL:          "https://pencom.gov.ng",
+					PublishedAt:  "2026-10-11T09:00:00Z",
+					ClaimSummary: "Operational guidelines on RSA balance drawdown for mortgage equity.",
+				},
+			},
+			SocialVariants: models.SocialVariants{
+				X:          "HOUSING FINANCE: PenCom streamlines 25% pension equity access for first-time home buyers. Approval turnaround cut to 3 weeks 🏡🔑",
+				Facebook:   "Did you know you can use up to 25% of your pension savings as down payment for your first home? Here is the new streamlined process.",
+				LinkedIn:   "Retirement & Wealth: PenCom mortgage equity accessibility creates homeownership pathways for salaried professionals.",
+				Newsletter: "Personal Finance: Guide to accessing your RSA balance for a primary mortgage.",
+			},
+			PublishedAt: now,
+			CreatedAt:   now,
+		},
+
+		// 21. Midnight Calls Across Six Time Zones: The Intimate Geometry of Diaspora Romance
+		{
+			ID:           deterministicUUID("midnight-calls-across-six-time-zones-diaspora-love"),
+			Slug:         "midnight-calls-across-six-time-zones-diaspora-love",
+			Title:        "Midnight Calls Across Six Time Zones: The Intimate Geometry of Diaspora Romance",
+			Kicker:       "PERSONAL ESSAY · MODERN LOVE",
+			Deck:         "Between erratic transatlantic flight schedules, spotty WiFi, and divergent daylight hours, contemporary Nigerian couples redefine emotional closeness from London to Lagos.",
+			Category:     models.PillarCategory("stories-romance"),
+			CategoryName: "Stories & Romance",
+			Author: models.Author{
+				Name: "Folashade Adeleke",
+				Role: "Senior Essayist",
+			},
+			FeaturedImage: models.FeaturedImage{
+				StorageKey: "media/6a3d9e75-9666-5888-8777-222233334444.webp",
+				URL:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/6a3d9e75-9666-5888-8777-222233334444.webp",
+				Caption:    "Reflective evening shadows and shared phone conversations across transatlantic horizons.",
+				Credit:     "Cherryl Media Essay Collection",
+			},
+			ReadTime: "5 min read",
+			Status:   models.StatusPublished,
+			Tags:     []string{"Modern Love", "Diaspora", "Relationships", "Memoir", "Essays"},
+			Excerpt:  "A meditative exploration of long-distance courtship, FaceTime rituals, and the peculiar tenderness of building intimacy when oceans and time zones intervene.",
+			Body: []models.ContentBlock{
+				{
+					Type: "paragraph",
+					IsDropCap: true,
+					Text: "There is an unspoken geometry to loving someone who wakes up when you are preparing for bed. It begins with the instinctive calculation of hours—subtract one in winter, add five when summer daylight savings shift—and settles into a quiet cadence of whispered voice notes sent between tube stations and generator hums.",
+				},
+				{
+					Type: "paragraph",
+					Text: "For tens of thousands of young Nigerians who relocated in recent years, intimacy has transformed from shared evening meals in Ikeja into shared screen time, virtual cooking sessions, and the fragile vulnerability of transatlantic phone calls.",
+				},
+				{
+					Type: "quote",
+					Quote: "Distance doesn't diminish affection; it magnifies intention. Every minute of attention across oceans must be deliberately chosen.",
+					Author: "Bisi Akintola",
+					Context: "Writer & Cultural Anthropologist",
+				},
+			},
+			Sources: []models.SourceCitation{
+				{
+					SourceName:   "Cherryl Media Cultural Archive",
+					URL:          "https://cherrylmedia.com",
+					PublishedAt:  "2026-10-14T18:00:00Z",
+					ClaimSummary: "Modern diaspora interpersonal relationship essays.",
+				},
+			},
+			SocialVariants: models.SocialVariants{
+				X:          "MODERN LOVE: Voice notes between tube stations and generator hums: the tender art of transatlantic Nigerian love across time zones ✈️❤️",
+				Facebook:   "How modern Nigerian couples navigate long-distance relationships between Lagos, London, and Toronto without losing the spark.",
+				LinkedIn:   "Culture & Society: The psychological and interpersonal dynamics of modern diaspora migration.",
+				Newsletter: "Weekend Essay: Midnight calls across six time zones.",
+			},
+			PublishedAt: now,
+			CreatedAt:   now,
+		},
+
+		// 22. Love on the Lekki Expressway: An Unlikely Serendipity in Gridlock
+		{
+			ID:           deterministicUUID("love-on-the-lekki-expressway-rush-hour-serendipity"),
+			Slug:         "love-on-the-lekki-expressway-rush-hour-serendipity",
+			Title:        "Love on the Lekki Expressway: An Unlikely Serendipity in Gridlock",
+			Kicker:       "URBAN DISPATCH · ROMANCE",
+			Deck:         "When an overheating radiator stalled two cars side by side at Chevron tollgate in peak evening traffic, an unexpected shared laugh turned into four years of marriage.",
+			Category:     models.PillarCategory("stories-romance"),
+			CategoryName: "Stories & Romance",
+			Author: models.Author{
+				Name: "Folashade Adeleke",
+				Role: "Senior Essayist",
+			},
+			FeaturedImage: models.FeaturedImage{
+				StorageKey: "media/7b4e0f86-9777-5999-8888-333344445555.webp",
+				URL:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/7b4e0f86-9777-5999-8888-333344445555.webp",
+				Caption:    "Tail lights and evening glow reflecting off the wet asphalt along the Lekki-Epe expressway corridor.",
+				Credit:     "Photo: Cherryl Media Field Archive",
+			},
+			ReadTime: "4 min read",
+			Status:   models.StatusPublished,
+			Tags:     []string{"Lagos", "Romance", "Urban Life", "City Stories", "Memoir"},
+			Excerpt:  "A warm, witty chronicle of how Lagos traffic jams—ordinarily a source of collective exasperation—became the stage for one couple's serendipitous beginnings.",
+			Body: []models.ContentBlock{
+				{
+					Type: "paragraph",
+					IsDropCap: true,
+					Text: "In Lagos, the highway is rarely romantic. At 6:45 PM on a rainy Thursday near Chevron tollgate, it is typically a symphony of horns, brake lights, and roasted plantain vendors dodging side mirrors. Yet that evening, when two Japanese sedans suffered identical overheated radiators within ten feet of each other on the shoulder, circumstance engineered a meeting that neither dating apps nor dinner parties could have arranged.",
+				},
+				{
+					Type: "quote",
+					Quote: "If you can laugh together while pouring bottled water into a boiling car engine in the middle of Lagos traffic, you can survive almost anything together.",
+					Author: "Timi Balogun",
+					Context: "Lekki Resident & Architect",
+				},
+				{
+					Type: "paragraph",
+					Text: "Four years later, the radiator water bottle still sits on their bookshelf in Victoria Island—a lighthearted testament to the spontaneous magic that thrives even in the city's most stubborn gridlock.",
+				},
+			},
+			Sources: []models.SourceCitation{
+				{
+					SourceName:   "Cherryl Media Urban Memoirs",
+					URL:          "https://cherrylmedia.com",
+					PublishedAt:  "2026-10-13T19:00:00Z",
+					ClaimSummary: "Lagos urban chronicles and personal essays.",
+				},
+			},
+			SocialVariants: models.SocialVariants{
+				X:          "LAGOS STORIES: Overheating radiators at Chevron tollgate, shared bottled water, and 4 years of marriage. Proof that Lagos traffic has a sense of humor 💕🚗",
+				Facebook:   "How a stalled car on the Lekki-Epe Expressway led to one couple's unexpected love story.",
+				LinkedIn:   "Human Interest: The human stories and resilient humor of urban life in Lagos.",
+				Newsletter: "Lagos Chronicles: Love on the Lekki Expressway.",
+			},
+			PublishedAt: now,
+			CreatedAt:   now,
+		},
+
 	}
 }
