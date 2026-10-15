@@ -101,7 +101,7 @@ func main() {
 	mux := http.NewServeMux()
 	articleHandler := handlers.NewArticleHandler(articleStore, s3Storage)
 	uploadHandler := handlers.NewUploadHandler(s3Storage, uploadStore)
-	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret)
+	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret, cfg.Supabase)
 
 	// Authentication routes
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)

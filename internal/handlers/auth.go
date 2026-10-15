@@ -1,24 +1,30 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/auth"
+	"github.com/okoye-dev/cherryl-media-engine/internal/config"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 )
 
 type AuthHandler struct {
 	userStore store.UserStore
 	jwtSecret string
+	supabase  config.SupabaseConfig
 }
 
-func NewAuthHandler(u store.UserStore, jwtSecret string) *AuthHandler {
+func NewAuthHandler(u store.UserStore, jwtSecret string, supabase config.SupabaseConfig) *AuthHandler {
 	return &AuthHandler{
 		userStore: u,
 		jwtSecret: jwtSecret,
+		supabase:  supabase,
 	}
 }
 
@@ -50,6 +56,26 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Authenticate against Supabase Auth if configured
+	if h.supabase.URL != "" && (h.supabase.PublishableKey != "" || h.supabase.SecretKey != "") {
+		if sbResp, err := h.loginWithSupabase(r.Context(), email, req.Password); err == nil {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "cherryl_token",
+				Value:    sbResp.Token,
+				Path:     "/",
+				Expires:  time.Now().Add(7 * 24 * time.Hour),
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+				Secure:   false,
+			})
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(sbResp)
+			return
+		}
+	}
+
+	// 2. Fallback to local user store
 	user, hash, err := h.userStore.GetUserByEmail(r.Context(), email)
 	if err != nil {
 		http.Error(w, `{"error":"invalid email or password"}`, http.StatusUnauthorized)
@@ -123,4 +149,97 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(user)
+}
+
+type supabaseTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+	User        struct {
+		ID           string                 `json:"id"`
+		Email        string                 `json:"email"`
+		AppMetadata  map[string]interface{} `json:"app_metadata"`
+		UserMetadata map[string]interface{} `json:"user_metadata"`
+	} `json:"user"`
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+	Msg              string `json:"msg"`
+}
+
+func (h *AuthHandler) loginWithSupabase(ctx context.Context, email, password string) (*LoginResponse, error) {
+	if h.supabase.URL == "" {
+		return nil, errors.New("supabase not configured")
+	}
+
+	apiKey := h.supabase.PublishableKey
+	if apiKey == "" {
+		apiKey = h.supabase.SecretKey
+	}
+	if apiKey == "" {
+		return nil, errors.New("supabase api key missing")
+	}
+
+	endpoint := strings.TrimRight(h.supabase.URL, "/") + "/auth/v1/token?grant_type=password"
+	payload, _ := json.Marshal(map[string]string{
+		"email":    email,
+		"password": password,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var tokenResp supabaseTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK || tokenResp.AccessToken == "" {
+		errMsg := tokenResp.ErrorDescription
+		if errMsg == "" {
+			errMsg = tokenResp.Msg
+		}
+		if errMsg == "" {
+			errMsg = tokenResp.Error
+		}
+		if errMsg == "" {
+			errMsg = "supabase authentication failed"
+		}
+		return nil, errors.New(errMsg)
+	}
+
+	fullName := "Newsroom Editor"
+	if fn, ok := tokenResp.User.UserMetadata["full_name"].(string); ok && fn != "" {
+		fullName = fn
+	}
+	role := "admin"
+	if r, ok := tokenResp.User.AppMetadata["role"].(string); ok && r != "" {
+		role = r
+	} else if r, ok := tokenResp.User.UserMetadata["role"].(string); ok && r != "" {
+		role = r
+	}
+
+	user := &auth.User{
+		ID:        tokenResp.User.ID,
+		Email:     tokenResp.User.Email,
+		FullName:  fullName,
+		Role:      role,
+		Active:    true,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	return &LoginResponse{
+		Token: tokenResp.AccessToken,
+		User:  user,
+	}, nil
 }

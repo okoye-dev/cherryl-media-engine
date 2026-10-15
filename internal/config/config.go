@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"log"
 	"os"
 	"strconv"
@@ -50,6 +51,8 @@ func (s *S3Config) IsConfigured() bool {
 }
 
 func Load() *Config {
+	loadEnvFile(".env", "../.env")
+
 	cfg := &Config{
 		Port:           getEnv("PORT", "8080"),
 		JWTSecret:      getEnv("JWT_SECRET", ""),
@@ -126,4 +129,32 @@ func getEnvList(key string, defaultVal []string) []string {
 		items[i] = strings.TrimSpace(items[i])
 	}
 	return items
+}
+
+func loadEnvFile(paths ...string) {
+	for _, p := range paths {
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				val := strings.TrimSpace(parts[1])
+				val = strings.Trim(val, `"'`)
+				if _, exists := os.LookupEnv(key); !exists {
+					_ = os.Setenv(key, val)
+				}
+			}
+		}
+		break
+	}
 }
