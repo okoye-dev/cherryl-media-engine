@@ -42,6 +42,8 @@ type ContentBlock struct {
 	Publisher  string `json:"publisher,omitempty"`
 	IsInternal bool   `json:"isInternal,omitempty"`
 	VideoURL   string `json:"videoUrl,omitempty"`
+	ReadTime   string `json:"readTime,omitempty"`
+	Verified   bool   `json:"verified,omitempty"`
 }
 
 type Author struct {
@@ -101,17 +103,22 @@ type Article struct {
 	ID             string           `json:"id"`
 	Slug           string           `json:"slug"`
 	Title          string           `json:"title"`
-	Kicker         string           `json:"kicker"`
-	Deck           string           `json:"deck"`
+	Kicker         string           `json:"kicker,omitempty"`
+	Deck           string           `json:"deck,omitempty"`
 	Category       PillarCategory   `json:"category"`
-	CategoryName   string           `json:"categoryName"`
+	CategoryName   string           `json:"categoryName,omitempty"`
 	Author         Author           `json:"author"`
 	FeaturedImage  FeaturedImage    `json:"featuredImage"`
-	ReadTime       string           `json:"readTime"`
+	ReadTime       string           `json:"readTime,omitempty"`
 	Status         PublishingStatus `json:"status"`
+	Tags           []string         `json:"tags,omitempty"`
+	Excerpt        string           `json:"excerpt,omitempty"`
+	OriginalURL    string           `json:"originalUrl,omitempty"`
+	IsLead         bool             `json:"isLead,omitempty"`
+	Urgent         bool             `json:"urgent,omitempty"`
 	Body           []ContentBlock   `json:"body"`
-	Sources        []SourceCitation `json:"sources"`
-	SocialVariants SocialVariants   `json:"socialVariants"`
+	Sources        []SourceCitation `json:"sources,omitempty"`
+	SocialVariants SocialVariants   `json:"socialVariants,omitempty"`
 	CandidateID    string           `json:"candidateId,omitempty"`
 	AuthorID       string           `json:"authorId,omitempty"`
 	PublishedBy    string           `json:"publishedBy,omitempty"`

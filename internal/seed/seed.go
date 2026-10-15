@@ -41,15 +41,15 @@ func Run(ctx context.Context, s SeedableStore) error {
 		}
 	}
 
-	// 2. Seed Canonical Published Articles
-	articles := GetCanonicalArticles()
+	// 2. Seed All Admin Website Articles
+	articles := GetAllWebsiteArticles()
 	for _, art := range articles {
 		a := art
 		if err := s.Save(ctx, &a); err != nil {
 			log.Printf("seed article %s: %v", a.Slug, err)
 		}
 	}
-	log.Printf("seeded %d canonical articles", len(articles))
+	log.Printf("seeded %d published articles", len(articles))
 
 	// 3. Seed Suggested Discovery Leads
 	candidates := GetInitialCandidates()

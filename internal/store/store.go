@@ -50,7 +50,7 @@ func NewPGStore(pool *pgxpool.Pool) *PGStore {
 
 func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, error) {
 	baseQuery := `
-		SELECT id, slug, title, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, published_at, created_at
+		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
 		FROM articles
 	`
 	var rows pgx.Rows
@@ -72,12 +72,14 @@ func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, er
 	for rows.Next() {
 		var (
 			id, slug, title, category, status string
-			deck, coverImage, authorName, authorRole, readTime, candidateID, aiNotes *string
+			kicker, deck, coverImage, authorName, authorRole, readTime, candidateID, aiNotes, excerpt, origURL *string
+			isLead, urgent bool
 			blocksJSON, sourcesJSON, socialJSON []byte
 			publishedAt, createdAt *time.Time
+			tags []string
 		)
 
-		err := rows.Scan(&id, &slug, &title, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &publishedAt, &createdAt)
+		err := rows.Scan(&id, &slug, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags)
 		if err != nil {
 			return nil, fmt.Errorf("scan article: %w", err)
 		}
@@ -89,6 +91,12 @@ func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, er
 			Category:     models.PillarCategory(category),
 			CategoryName: category,
 			Status:       models.PublishingStatus(status),
+			Tags:         tags,
+			IsLead:       isLead,
+			Urgent:       urgent,
+		}
+		if kicker != nil {
+			art.Kicker = *kicker
 		}
 		if deck != nil {
 			art.Deck = *deck
@@ -110,6 +118,12 @@ func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, er
 		}
 		if aiNotes != nil {
 			art.AIReviewNotes = *aiNotes
+		}
+		if excerpt != nil {
+			art.Excerpt = *excerpt
+		}
+		if origURL != nil {
+			art.OriginalURL = *origURL
 		}
 		if publishedAt != nil {
 			art.PublishedAt = *publishedAt
@@ -135,19 +149,21 @@ func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, er
 
 func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, slug, title, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, published_at, created_at
+		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
 		FROM articles
 		WHERE slug = $1
 	`, slug)
 
 	var (
 		id, sl, title, category, status string
-		deck, coverImage, authorName, authorRole, readTime, candidateID, aiNotes *string
+		kicker, deck, coverImage, authorName, authorRole, readTime, candidateID, aiNotes, excerpt, origURL *string
+		isLead, urgent bool
 		blocksJSON, sourcesJSON, socialJSON []byte
 		publishedAt, createdAt *time.Time
+		tags []string
 	)
 
-	err := row.Scan(&id, &sl, &title, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &publishedAt, &createdAt)
+	err := row.Scan(&id, &sl, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -162,6 +178,12 @@ func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, 
 		Category:     models.PillarCategory(category),
 		CategoryName: category,
 		Status:       models.PublishingStatus(status),
+		Tags:         tags,
+		IsLead:       isLead,
+		Urgent:       urgent,
+	}
+	if kicker != nil {
+		art.Kicker = *kicker
 	}
 	if deck != nil {
 		art.Deck = *deck
@@ -183,6 +205,12 @@ func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, 
 	}
 	if aiNotes != nil {
 		art.AIReviewNotes = *aiNotes
+	}
+	if excerpt != nil {
+		art.Excerpt = *excerpt
+	}
+	if origURL != nil {
+		art.OriginalURL = *origURL
 	}
 	if publishedAt != nil {
 		art.PublishedAt = *publishedAt
@@ -208,16 +236,22 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 	sourcesJSON, _ := json.Marshal(a.Sources)
 	socialJSON, _ := json.Marshal(a.SocialVariants)
 
-	if a.ID == "" {
-		a.ID = fmt.Sprintf("art-%d", time.Now().UnixNano())
+	var artID string
+	if _, err := uuid.Parse(a.ID); err == nil {
+		artID = a.ID
 	}
 	if a.CreatedAt.IsZero() {
 		a.CreatedAt = time.Now()
 	}
 
+	tags := a.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO articles (slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, published_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULLIF($14, '')::uuid, $15, $16, $17, NOW())
+		INSERT INTO articles (id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, updated_at, tags)
+		VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, '')::uuid, $16, $17, $18, $19, $20, $21, $22, NOW(), $23)
 		ON CONFLICT (slug) DO UPDATE
 		SET title = EXCLUDED.title,
 		    kicker = EXCLUDED.kicker,
@@ -231,10 +265,15 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		    social_variants = EXCLUDED.social_variants,
 		    read_time = EXCLUDED.read_time,
 		    status = EXCLUDED.status,
+		    tags = EXCLUDED.tags,
+		    excerpt = EXCLUDED.excerpt,
+		    original_url = EXCLUDED.original_url,
+		    is_lead = EXCLUDED.is_lead,
+		    urgent = EXCLUDED.urgent,
 		    ai_review_notes = EXCLUDED.ai_review_notes,
 		    published_at = EXCLUDED.published_at,
 		    updated_at = NOW()
-	`, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, blocksJSON, sourcesJSON, socialJSON, a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.PublishedAt, a.CreatedAt)
+	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, blocksJSON, sourcesJSON, socialJSON, a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags)
 
 	if err != nil {
 		return fmt.Errorf("upsert article %q: %w", a.Slug, err)
@@ -423,7 +462,7 @@ func (s *PGStore) ConfirmUpload(ctx context.Context, key string, size int64, pub
 func (s *PGStore) Publish(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error) {
 	art, err := s.GetBySlug(ctx, idOrSlug)
 	if err != nil {
-		row := s.pool.QueryRow(ctx, "SELECT slug FROM articles WHERE id = $1", idOrSlug)
+		row := s.pool.QueryRow(ctx, "SELECT slug FROM articles WHERE id::text = $1", idOrSlug)
 		var sl string
 		if err := row.Scan(&sl); err != nil {
 			return nil, ErrNotFound
@@ -442,11 +481,16 @@ func (s *PGStore) Publish(ctx context.Context, idOrSlug string, publishedBy stri
 	}
 
 	now := time.Now().UTC()
+	var pubByUUID *string
+	if _, err := uuid.Parse(publishedBy); err == nil {
+		pubByUUID = &publishedBy
+	}
+
 	_, err = s.pool.Exec(ctx, `
 		UPDATE articles
-		SET status = 'published', published_at = $1, published_by = $2, updated_at = $1
-		WHERE id = $3 OR slug = $3
-	`, now, publishedBy, idOrSlug)
+		SET status = 'published', published_at = $1, published_by = NULLIF($2, '')::uuid, updated_at = $1
+		WHERE id::text = $3 OR slug = $3
+	`, now, pubByUUID, idOrSlug)
 	if err != nil {
 		return nil, fmt.Errorf("publishing article: %w", err)
 	}

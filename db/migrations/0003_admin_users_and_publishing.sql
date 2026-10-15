@@ -39,7 +39,3 @@ ALTER TABLE articles
 
 CREATE INDEX IF NOT EXISTS idx_articles_author ON articles(author_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published_by ON articles(published_by);
-
--- Record migration
-INSERT INTO schema_migrations (version) VALUES ('0003_admin_users_and_publishing')
-ON CONFLICT (version) DO NOTHING;

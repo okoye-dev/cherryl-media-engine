@@ -75,7 +75,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool) error {
 			tx.Rollback(ctx)
 			return fmt.Errorf("apply %s: %w", name, err)
 		}
-		if _, err := tx.Exec(ctx, "insert into schema_migrations (version) values ($1)", name); err != nil {
+		if _, err := tx.Exec(ctx, "insert into schema_migrations (version) values ($1) on conflict (version) do nothing", name); err != nil {
 			tx.Rollback(ctx)
 			return fmt.Errorf("record %s: %w", name, err)
 		}
