@@ -1,5 +1,6 @@
 bin/
 uploads/
 .env*
+!.env.example
 *.local
 .DS_Store
