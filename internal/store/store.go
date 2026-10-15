@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -522,7 +523,11 @@ func NewMemoryStore() *MemoryStore {
 	}
 
 	// Default development admin credentials
-	adminHash, _ := auth.HashPassword("cherryl2026!")
+	initPass := os.Getenv("INITIAL_ADMIN_PASSWORD")
+	if initPass == "" {
+		initPass = "cherryl-dev-editor"
+	}
+	adminHash, _ := auth.HashPassword(initPass)
 	adminUser := &auth.User{
 		ID:        "usr-admin-01",
 		Email:     "admin@cherrylmedia.com",

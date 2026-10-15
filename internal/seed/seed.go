@@ -3,6 +3,7 @@ package seed
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,7 +19,12 @@ type SeedableStore interface {
 
 func Run(ctx context.Context, s SeedableStore) error {
 	// 1. Seed Default Admin User
-	adminPassHash, err := auth.HashPassword("cherryl2026!")
+	adminPass := os.Getenv("INITIAL_ADMIN_PASSWORD")
+	if adminPass == "" {
+		adminPass = "cherry-" + uuid.New().String()[:8]
+		log.Printf("[SEED] INITIAL_ADMIN_PASSWORD unset; generated temporary admin password: %s", adminPass)
+	}
+	adminPassHash, err := auth.HashPassword(adminPass)
 	if err == nil {
 		adminUser := &auth.User{
 			ID:        "usr-admin-01",
