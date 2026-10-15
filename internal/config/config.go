@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Port           string
+	JWTSecret      string
 	AllowedOrigins []string
 	Database       DatabaseConfig
 	S3             S3Config
@@ -36,6 +37,7 @@ func (s *S3Config) IsConfigured() bool {
 func Load() *Config {
 	cfg := &Config{
 		Port:           getEnv("PORT", "8080"),
+		JWTSecret:      getEnv("JWT_SECRET", "cherryl_default_dev_secret_2026_change_in_production"),
 		AllowedOrigins: getEnvList("ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"}),
 		Database: DatabaseConfig{
 			URL: getEnv("DATABASE_URL", ""),

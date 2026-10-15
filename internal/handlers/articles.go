@@ -25,7 +25,8 @@ func NewArticleHandler(s store.ArticleStore) *ArticleHandler {
 }
 
 func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
-	articles, err := h.store.List(r.Context())
+	status := r.URL.Query().Get("status")
+	articles, err := h.store.List(r.Context(), status)
 	if err != nil {
 		http.Error(w, `{"error":"failed to fetch articles"}`, http.StatusInternalServerError)
 		return
@@ -35,8 +36,41 @@ func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(articles)
 }
 
+func (h *ArticleHandler) PublishArticle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPost {
+		http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/articles/")
+	id = strings.TrimSuffix(id, "/publish")
+	id = strings.TrimSpace(id)
+	if id == "" {
+		http.Error(w, `{"error":"article id or slug is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	publishedBy := "editor"
+	art, err := h.store.Publish(r.Context(), id, publishedBy)
+	if errors.Is(err, store.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"success": true,
+		"article": art,
+	})
+}
+
 func (h *ArticleHandler) GetArticle(w http.ResponseWriter, r *http.Request) {
 	slug := strings.TrimPrefix(r.URL.Path, "/api/articles/")
+	slug = strings.TrimSuffix(slug, "/publish")
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		http.NotFound(w, r)

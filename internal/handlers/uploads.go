@@ -172,6 +172,69 @@ func (h *UploadHandler) DirectUpload(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
+type ConfirmUploadRequest struct {
+	StorageKey string `json:"storage_key"`
+	FileName   string `json:"file_name"`
+}
+
+type ConfirmUploadResponse struct {
+	Confirmed  bool   `json:"confirmed"`
+	StorageKey string `json:"storage_key"`
+	PublicURL  string `json:"public_url"`
+	SizeBytes  int64  `json:"size_bytes"`
+}
+
+func (h *UploadHandler) ConfirmUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req ConfirmUploadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.StorageKey == "" {
+		http.Error(w, `{"error":"storage_key is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var size int64
+	var err error
+
+	if h.storage.IsConfigured() {
+		size, err = h.storage.GetFileSize(r.Context(), req.StorageKey)
+		if err != nil {
+			log.Printf("confirm upload check %s: %v", req.StorageKey, err)
+			http.Error(w, `{"error":"File not found in S3 bucket. Ensure upload finished before confirming."}`, http.StatusNotFound)
+			return
+		}
+	} else {
+		// local dev check
+		destPath := filepath.Join("./uploads", filepath.Base(req.StorageKey))
+		info, statErr := os.Stat(destPath)
+		if statErr != nil {
+			http.Error(w, `{"error":"File not found in local upload directory"}`, http.StatusNotFound)
+			return
+		}
+		size = info.Size()
+	}
+
+	publicURL := h.storage.GetPublicURL(req.StorageKey)
+	if !h.storage.IsConfigured() {
+		publicURL = "/uploads/" + filepath.Base(req.StorageKey)
+	}
+
+	if h.store != nil {
+		_ = h.store.ConfirmUpload(r.Context(), req.StorageKey, size, publicURL)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(ConfirmUploadResponse{
+		Confirmed:  true,
+		StorageKey: req.StorageKey,
+		PublicURL:  publicURL,
+		SizeBytes:  size,
+	})
+}
+
 func fmtKey(id, ext string) string {
 	now := time.Now().UTC()
 	return path.Join("media", now.Format("2006/01"), id+ext)

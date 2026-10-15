@@ -10,6 +10,7 @@ import (
 	"github.com/okoye-dev/cherryl-media-engine/internal/config"
 	"github.com/okoye-dev/cherryl-media-engine/internal/handlers"
 	"github.com/okoye-dev/cherryl-media-engine/internal/migrate"
+	"github.com/okoye-dev/cherryl-media-engine/internal/seed"
 	"github.com/okoye-dev/cherryl-media-engine/internal/storage"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 )
@@ -39,6 +40,7 @@ func main() {
 	// Database setup (PostgreSQL / Supabase)
 	var articleStore store.ArticleStore
 	var uploadStore store.UploadStore
+	var userStore store.UserStore
 
 	if cfg.Database.URL != "" {
 		ctx := context.Background()
@@ -60,20 +62,40 @@ func main() {
 		pg := store.NewPGStore(pool)
 		articleStore = pg
 		uploadStore = pg
+		userStore = pg
+
+		// Seed PostgreSQL with canonical articles and default admin if not already present
+		if err := seed.Run(ctx, pg); err != nil {
+			log.Printf("initial database seeding warning: %v", err)
+		}
 	} else {
 		mem := store.NewMemoryStore()
 		articleStore = mem
 		uploadStore = mem
+		userStore = mem
+
+		// Seed Memory store
+		if err := seed.Run(context.Background(), mem); err != nil {
+			log.Printf("initial memory seeding warning: %v", err)
+		}
 	}
 
 	mux := http.NewServeMux()
 	articleHandler := handlers.NewArticleHandler(articleStore)
 	uploadHandler := handlers.NewUploadHandler(s3Storage, uploadStore)
+	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret)
+
+	// Authentication routes
+	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
+	mux.HandleFunc("POST /api/auth/logout", authHandler.Logout)
+	mux.HandleFunc("GET /api/auth/me", authHandler.Me)
 
 	// Article routes
 	mux.HandleFunc("GET /api/articles", articleHandler.ListArticles)
 	mux.HandleFunc("GET /api/articles/", articleHandler.GetArticle)
 	mux.HandleFunc("POST /api/articles", articleHandler.SaveArticle)
+	mux.HandleFunc("POST /api/articles/{id}/publish", articleHandler.PublishArticle)
+	mux.HandleFunc("PUT /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("GET /api/links/resolve", articleHandler.ResolveLink)
 
 	// AI discovery candidates and sources routes
@@ -81,8 +103,9 @@ func main() {
 	mux.HandleFunc("GET /api/candidates/", articleHandler.GetCandidate)
 	mux.HandleFunc("GET /api/sources", articleHandler.ListSources)
 
-	// Presigned S3 upload routes
+	// Presigned S3 upload & confirm landing routes
 	mux.HandleFunc("POST /api/uploads/presign", uploadHandler.PresignUpload)
+	mux.HandleFunc("POST /api/uploads/confirm", uploadHandler.ConfirmUpload)
 	mux.HandleFunc("POST /api/files/presign-upload", uploadHandler.PresignUpload)
 	mux.HandleFunc("PUT /api/uploads/direct", uploadHandler.DirectUpload)
 	mux.HandleFunc("POST /api/uploads/direct", uploadHandler.DirectUpload)

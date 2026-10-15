@@ -10,23 +10,32 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/okoye-dev/cherryl-media-engine/internal/auth"
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
 )
 
 var ErrNotFound = errors.New("not found")
 
 type ArticleStore interface {
-	List(ctx context.Context) ([]models.Article, error)
+	List(ctx context.Context, status string) ([]models.Article, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Article, error)
 	Save(ctx context.Context, a *models.Article) error
+	Publish(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error)
 	ListCandidates(ctx context.Context) ([]models.SuggestedStory, error)
 	GetCandidate(ctx context.Context, id string) (*models.SuggestedStory, error)
 	SaveCandidate(ctx context.Context, s *models.SuggestedStory) error
 	ListSources(ctx context.Context) ([]models.Source, error)
 }
 
+type UserStore interface {
+	GetUserByEmail(ctx context.Context, email string) (*auth.User, string, error)
+	GetUserByID(ctx context.Context, id string) (*auth.User, error)
+	CreateUser(ctx context.Context, u *auth.User, passwordHash string) error
+}
+
 type UploadStore interface {
 	RecordUpload(ctx context.Context, key, name string, size int64, contentType, publicURL string) error
+	ConfirmUpload(ctx context.Context, key string, size int64, publicURL string) error
 }
 
 type PGStore struct {
@@ -37,12 +46,21 @@ func NewPGStore(pool *pgxpool.Pool) *PGStore {
 	return &PGStore{pool: pool}
 }
 
-func (s *PGStore) List(ctx context.Context) ([]models.Article, error) {
-	rows, err := s.pool.Query(ctx, `
+func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, error) {
+	baseQuery := `
 		SELECT id, slug, title, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, published_at, created_at
 		FROM articles
-		ORDER BY created_at DESC
-	`)
+	`
+	var rows pgx.Rows
+	var err error
+
+	if status == "" || status == "published" {
+		rows, err = s.pool.Query(ctx, baseQuery+" WHERE status = 'published' AND published_at <= NOW() ORDER BY published_at DESC")
+	} else if status == "all" {
+		rows, err = s.pool.Query(ctx, baseQuery+" ORDER BY created_at DESC")
+	} else {
+		rows, err = s.pool.Query(ctx, baseQuery+" WHERE status = $1 ORDER BY created_at DESC", status)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list articles: %w", err)
 	}
@@ -387,12 +405,111 @@ func (s *PGStore) RecordUpload(ctx context.Context, key, name string, size int64
 	return nil
 }
 
+func (s *PGStore) ConfirmUpload(ctx context.Context, key string, size int64, publicURL string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO uploads (storage_key, file_name, size_bytes, content_type, public_url, created_at)
+		VALUES ($1, $1, $2, 'application/octet-stream', $3, NOW())
+		ON CONFLICT (storage_key) DO UPDATE
+		SET size_bytes = $2, public_url = $3
+	`, key, size, publicURL)
+	if err != nil {
+		return fmt.Errorf("confirm upload: %w", err)
+	}
+	return nil
+}
+
+func (s *PGStore) Publish(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error) {
+	art, err := s.GetBySlug(ctx, idOrSlug)
+	if err != nil {
+		row := s.pool.QueryRow(ctx, "SELECT slug FROM articles WHERE id = $1", idOrSlug)
+		var sl string
+		if err := row.Scan(&sl); err != nil {
+			return nil, ErrNotFound
+		}
+		art, err = s.GetBySlug(ctx, sl)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if art.Title == "" {
+		return nil, errors.New("cannot publish article without a title")
+	}
+	if art.FeaturedImage.URL == "" {
+		return nil, errors.New("cannot publish article without a cover photograph")
+	}
+
+	now := time.Now().UTC()
+	_, err = s.pool.Exec(ctx, `
+		UPDATE articles
+		SET status = 'published', published_at = $1, published_by = $2, updated_at = $1
+		WHERE id = $3 OR slug = $3
+	`, now, publishedBy, idOrSlug)
+	if err != nil {
+		return nil, fmt.Errorf("publishing article: %w", err)
+	}
+
+	art.Status = models.StatusPublished
+	art.PublishedAt = now
+	art.PublishedBy = publishedBy
+	return art, nil
+}
+
+func (s *PGStore) GetUserByEmail(ctx context.Context, email string) (*auth.User, string, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, email, password_hash, full_name, role, COALESCE(avatar_url, ''), active, created_at
+		FROM users
+		WHERE LOWER(email) = LOWER($1)
+	`, email)
+
+	var u auth.User
+	var hash string
+	err := row.Scan(&u.ID, &u.Email, &hash, &u.FullName, &u.Role, &u.AvatarURL, &u.Active, &u.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", ErrNotFound
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("get user by email: %w", err)
+	}
+	return &u, hash, nil
+}
+
+func (s *PGStore) GetUserByID(ctx context.Context, id string) (*auth.User, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, email, full_name, role, COALESCE(avatar_url, ''), active, created_at
+		FROM users
+		WHERE id = $1
+	`, id)
+
+	var u auth.User
+	err := row.Scan(&u.ID, &u.Email, &u.FullName, &u.Role, &u.AvatarURL, &u.Active, &u.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get user by id: %w", err)
+	}
+	return &u, nil
+}
+
+func (s *PGStore) CreateUser(ctx context.Context, u *auth.User, passwordHash string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO users (id, email, password_hash, full_name, role, avatar_url, active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+		ON CONFLICT (email) DO UPDATE
+		SET password_hash = $3, full_name = $4, role = $5, active = $7
+	`, u.ID, u.Email, passwordHash, u.FullName, u.Role, u.AvatarURL, u.Active, u.CreatedAt)
+	return err
+}
+
 type MemoryStore struct {
 	mu         sync.RWMutex
 	articles   map[string]models.Article
 	candidates map[string]models.SuggestedStory
 	sources    []models.Source
 	uploads    map[string]string
+	users      map[string]*auth.User
+	passwords  map[string]string
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -400,7 +517,22 @@ func NewMemoryStore() *MemoryStore {
 		articles:   make(map[string]models.Article),
 		candidates: make(map[string]models.SuggestedStory),
 		uploads:    make(map[string]string),
+		users:      make(map[string]*auth.User),
+		passwords:  make(map[string]string),
 	}
+
+	// Default development admin credentials
+	adminHash, _ := auth.HashPassword("cherryl2026!")
+	adminUser := &auth.User{
+		ID:        "usr-admin-01",
+		Email:     "admin@cherrylmedia.com",
+		FullName:  "Newsroom Editor",
+		Role:      "admin",
+		Active:    true,
+		CreatedAt: time.Now().UTC(),
+	}
+	m.users[adminUser.Email] = adminUser
+	m.passwords[adminUser.Email] = adminHash
 
 	// Sample article
 	m.articles["federal-executive-council-approves-unified-energy-framework"] = models.Article{
@@ -540,12 +672,18 @@ func NewMemoryStore() *MemoryStore {
 	return m
 }
 
-func (m *MemoryStore) List(ctx context.Context) ([]models.Article, error) {
+func (m *MemoryStore) List(ctx context.Context, status string) ([]models.Article, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	res := make([]models.Article, 0, len(m.articles))
 	for _, a := range m.articles {
-		res = append(res, a)
+		if status == "" || status == "published" {
+			if a.Status == models.StatusPublished {
+				res = append(res, a)
+			}
+		} else if status == "all" || string(a.Status) == status {
+			res = append(res, a)
+		}
 	}
 	return res, nil
 }
@@ -555,6 +693,12 @@ func (m *MemoryStore) GetBySlug(ctx context.Context, slug string) (*models.Artic
 	defer m.mu.RUnlock()
 	a, ok := m.articles[slug]
 	if !ok {
+		// Also allow searching by ID
+		for _, art := range m.articles {
+			if art.ID == slug {
+				return &art, nil
+			}
+		}
 		return nil, ErrNotFound
 	}
 	return &a, nil
@@ -568,6 +712,36 @@ func (m *MemoryStore) Save(ctx context.Context, a *models.Article) error {
 	}
 	m.articles[a.Slug] = *a
 	return nil
+}
+
+func (m *MemoryStore) Publish(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var targetKey string
+	for slug, a := range m.articles {
+		if slug == idOrSlug || a.ID == idOrSlug {
+			targetKey = slug
+			break
+		}
+	}
+	if targetKey == "" {
+		return nil, ErrNotFound
+	}
+
+	art := m.articles[targetKey]
+	if art.Title == "" {
+		return nil, errors.New("cannot publish article without a title")
+	}
+	if art.FeaturedImage.URL == "" {
+		return nil, errors.New("cannot publish article without a cover photograph")
+	}
+
+	art.Status = models.StatusPublished
+	art.PublishedAt = time.Now().UTC()
+	art.PublishedBy = publishedBy
+	m.articles[targetKey] = art
+	return &art, nil
 }
 
 func (m *MemoryStore) ListCandidates(ctx context.Context) ([]models.SuggestedStory, error) {
@@ -610,5 +784,41 @@ func (m *MemoryStore) RecordUpload(ctx context.Context, key, name string, size i
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.uploads[key] = publicURL
+	return nil
+}
+
+func (m *MemoryStore) ConfirmUpload(ctx context.Context, key string, size int64, publicURL string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.uploads[key] = publicURL
+	return nil
+}
+
+func (m *MemoryStore) GetUserByEmail(ctx context.Context, email string) (*auth.User, string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	u, ok := m.users[email]
+	if !ok {
+		return nil, "", ErrNotFound
+	}
+	return u, m.passwords[email], nil
+}
+
+func (m *MemoryStore) GetUserByID(ctx context.Context, id string) (*auth.User, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, u := range m.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (m *MemoryStore) CreateUser(ctx context.Context, u *auth.User, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.users[u.Email] = u
+	m.passwords[u.Email] = passwordHash
 	return nil
 }

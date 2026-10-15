@@ -40,6 +40,7 @@ type ContentBlock struct {
 	Deck       string `json:"deck,omitempty"`
 	Publisher  string `json:"publisher,omitempty"`
 	IsInternal bool   `json:"isInternal,omitempty"`
+	VideoURL   string `json:"videoUrl,omitempty"`
 }
 
 type Author struct {
@@ -110,6 +111,8 @@ type Article struct {
 	Sources        []SourceCitation `json:"sources"`
 	SocialVariants SocialVariants   `json:"socialVariants"`
 	CandidateID    string           `json:"candidateId,omitempty"`
+	AuthorID       string           `json:"authorId,omitempty"`
+	PublishedBy    string           `json:"publishedBy,omitempty"`
 	AIReviewNotes  string           `json:"aiReviewNotes,omitempty"`
 	PublishedAt    time.Time        `json:"publishedAt"`
 	CreatedAt      time.Time        `json:"createdAt"`
