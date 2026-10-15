@@ -76,7 +76,36 @@ func (h *ArticleHandler) NormalizeMediaKeys(art *models.Article) {
 
 func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
-	articles, err := h.store.List(r.Context(), status)
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		query = r.URL.Query().Get("search")
+	}
+	idsParam := r.URL.Query().Get("ids")
+
+	var articles []models.Article
+	var err error
+
+	if idsParam != "" {
+		var rawIDs []string
+		for _, id := range strings.Split(idsParam, ",") {
+			trimmed := strings.TrimSpace(id)
+			if trimmed != "" {
+				rawIDs = append(rawIDs, trimmed)
+			}
+		}
+		articles, err = h.store.GetByIDs(r.Context(), rawIDs)
+	} else if query != "" {
+		limit := 20
+		if lStr := r.URL.Query().Get("limit"); lStr != "" {
+			if l, lErr := strconv.Atoi(lStr); lErr == nil && l > 0 {
+				limit = l
+			}
+		}
+		articles, err = h.store.Search(r.Context(), query, limit)
+	} else {
+		articles, err = h.store.List(r.Context(), status)
+	}
+
 	if err != nil {
 		http.Error(w, `{"error":"failed to fetch articles"}`, http.StatusInternalServerError)
 		return
@@ -134,6 +163,10 @@ func (h *ArticleHandler) GetArticle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	art, err := h.store.GetBySlug(r.Context(), slug)
+	if errors.Is(err, store.ErrNotFound) {
+		// Also fallback to lookup by ID
+		art, err = h.store.GetByID(r.Context(), slug)
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		http.NotFound(w, r)
 		return

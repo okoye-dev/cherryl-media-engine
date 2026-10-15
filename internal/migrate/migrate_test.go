@@ -13,12 +13,13 @@ func TestMigrationFilesDiscovered(t *testing.T) {
 		t.Fatalf("failed to read migration files: %v", err)
 	}
 
-	if len(files) < 5 {
-		t.Fatalf("expected at least 5 migration files, got %d: %v", len(files), files)
+	if len(files) < 6 {
+		t.Fatalf("expected at least 6 migration files, got %d: %v", len(files), files)
 	}
 
 	// Verify sequential naming
-	expectedPrefixes := []string{"0001_", "0002_", "0003_", "0004_", "0005_"}
+	expectedPrefixes := []string{"0001_", "0002_", "0003_", "0004_", "0005_", "0006_"}
+
 	for i, prefix := range expectedPrefixes {
 		if !strings.HasPrefix(files[i], prefix) {
 			t.Errorf("expected migration [%d] to have prefix %s, got %s", i, prefix, files[i])

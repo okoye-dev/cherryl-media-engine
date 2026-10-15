@@ -17,6 +17,10 @@ type SeedableStore interface {
 	SaveCandidate(ctx context.Context, s *models.SuggestedStory) error
 }
 
+type SectionSeeder interface {
+	SaveSection(ctx context.Context, sectionKey string, articleIDs []string, metadata map[string]any) error
+}
+
 func Run(ctx context.Context, s SeedableStore) error {
 	// 1. Seed Default Admin User
 	adminPass := os.Getenv("INITIAL_ADMIN_PASSWORD")
@@ -60,6 +64,45 @@ func Run(ctx context.Context, s SeedableStore) error {
 		}
 	}
 	log.Printf("seeded %d discovery leads", len(candidates))
+
+	// 4. Seed Curated Sections
+	if secSeeder, ok := s.(SectionSeeder); ok {
+		defaultSections := []struct {
+			Key string
+			IDs []string
+		}{
+			{"hero_lead", []string{"2f405add-8bba-5261-99af-15feaa62754b"}},
+			{"hero_trending", []string{
+				"35588574-ec88-5a81-be90-8c46283c24de",
+				"decd08ac-ef71-54ee-ac58-fd2480c007fa",
+				"f10fad9c-c601-552e-a7b2-816b8c370ecc",
+			}},
+			{"featured_updates", []string{
+				"25386df5-95e6-50ad-bc4c-3b6db589992d",
+				"12f9e7fb-8019-5edb-80e9-7789a9729176",
+				"d2065825-0408-5a7f-b4d0-559be9e67a9a",
+				"278198f8-3eee-55ce-8736-dcdd55c46cec",
+			}},
+			{"perspectives", []string{
+				"278198f8-3eee-55ce-8736-dcdd55c46cec",
+				"d2065825-0408-5a7f-b4d0-559be9e67a9a",
+				"f10fad9c-c601-552e-a7b2-816b8c370ecc",
+			}},
+			{"dossier_lead", []string{"f3033f02-9628-52d2-bef4-8b0814c6d835"}},
+			{"dossier_soundscapes", []string{"d641aeae-a6be-50f5-a13c-54c67bbf6e75"}},
+			{"dossier_gastronomy", []string{"0827a7d0-015b-5643-ac3d-4ccced2b933c"}},
+			{"dossier_radar", []string{
+				"f2fc6ae3-16ec-51cc-bc8d-c9d2b4e4271f",
+				"ee3b36cb-8ce0-5f3c-bfae-3d077b882004",
+				"917d0345-9020-50e5-89eb-9cb1721d21fa",
+				"33a00b82-fd1f-5437-9317-0c951151d023",
+			}},
+		}
+		for _, sec := range defaultSections {
+			_ = secSeeder.SaveSection(ctx, sec.Key, sec.IDs, nil)
+		}
+		log.Printf("seeded %d curated sections", len(defaultSections))
+	}
 
 	return nil
 }

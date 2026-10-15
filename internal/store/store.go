@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +22,9 @@ var ErrNotFound = errors.New("not found")
 type ArticleStore interface {
 	List(ctx context.Context, status string) ([]models.Article, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Article, error)
+	GetByID(ctx context.Context, id string) (*models.Article, error)
+	GetByIDs(ctx context.Context, ids []string) ([]models.Article, error)
+	Search(ctx context.Context, query string, limit int) ([]models.Article, error)
 	Save(ctx context.Context, a *models.Article) error
 	Publish(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error)
 	ListCandidates(ctx context.Context) ([]models.SuggestedStory, error)
@@ -46,6 +50,12 @@ type SettingsStore interface {
 	GetAllSettings(ctx context.Context) (map[string]any, error)
 }
 
+type SectionStore interface {
+	GetSection(ctx context.Context, sectionKey string) (*models.CuratedSection, error)
+	GetAllSections(ctx context.Context) ([]models.CuratedSection, error)
+	SaveSection(ctx context.Context, sectionKey string, articleIDs []string, metadata map[string]any) error
+}
+
 type PGStore struct {
 	pool *pgxpool.Pool
 }
@@ -54,26 +64,7 @@ func NewPGStore(pool *pgxpool.Pool) *PGStore {
 	return &PGStore{pool: pool}
 }
 
-func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, error) {
-	baseQuery := `
-		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
-		FROM articles
-	`
-	var rows pgx.Rows
-	var err error
-
-	if status == "" || status == "published" {
-		rows, err = s.pool.Query(ctx, baseQuery+" WHERE status = 'published' AND published_at <= NOW() ORDER BY published_at DESC")
-	} else if status == "all" {
-		rows, err = s.pool.Query(ctx, baseQuery+" ORDER BY created_at DESC")
-	} else {
-		rows, err = s.pool.Query(ctx, baseQuery+" WHERE status = $1 ORDER BY created_at DESC", status)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("list articles: %w", err)
-	}
-	defer rows.Close()
-
+func scanArticleRows(rows pgx.Rows) ([]models.Article, error) {
 	var articles []models.Article
 	for rows.Next() {
 		var (
@@ -87,7 +78,7 @@ func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, er
 
 		err := rows.Scan(&id, &slug, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags)
 		if err != nil {
-			return nil, fmt.Errorf("scan article: %w", err)
+			return nil, fmt.Errorf("scan article row: %w", err)
 		}
 
 		art := models.Article{
@@ -150,18 +141,12 @@ func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, er
 		articles = append(articles, art)
 	}
 
-	return articles, nil
+	return articles, rows.Err()
 }
 
-func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
-		FROM articles
-		WHERE slug = $1
-	`, slug)
-
+func scanArticleRow(row pgx.Row, identifier string) (*models.Article, error) {
 	var (
-		id, sl, title, category, status string
+		id, slug, title, category, status string
 		kicker, deck, coverImage, authorName, authorRole, readTime, candidateID, aiNotes, excerpt, origURL *string
 		isLead, urgent bool
 		blocksJSON, sourcesJSON, socialJSON []byte
@@ -169,17 +154,17 @@ func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, 
 		tags []string
 	)
 
-	err := row.Scan(&id, &sl, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags)
+	err := row.Scan(&id, &slug, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get article %q: %w", slug, err)
+		return nil, fmt.Errorf("scan article %q: %w", identifier, err)
 	}
 
 	art := &models.Article{
 		ID:           id,
-		Slug:         sl,
+		Slug:         slug,
 		Title:        title,
 		Category:     models.PillarCategory(category),
 		CategoryName: category,
@@ -235,6 +220,104 @@ func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, 
 	}
 
 	return art, nil
+}
+
+func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, error) {
+	baseQuery := `
+		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
+		FROM articles
+	`
+	var rows pgx.Rows
+	var err error
+
+	if status == "" || status == "published" {
+		rows, err = s.pool.Query(ctx, baseQuery+" WHERE status = 'published' AND published_at <= NOW() ORDER BY published_at DESC")
+	} else if status == "all" {
+		rows, err = s.pool.Query(ctx, baseQuery+" ORDER BY created_at DESC")
+	} else {
+		rows, err = s.pool.Query(ctx, baseQuery+" WHERE status = $1 ORDER BY created_at DESC", status)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list articles: %w", err)
+	}
+	defer rows.Close()
+
+	return scanArticleRows(rows)
+}
+
+func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
+		FROM articles
+		WHERE slug = $1
+	`, slug)
+	return scanArticleRow(row, slug)
+}
+
+func (s *PGStore) GetByID(ctx context.Context, id string) (*models.Article, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
+		FROM articles
+		WHERE id = $1
+	`, id)
+	return scanArticleRow(row, id)
+}
+
+func (s *PGStore) GetByIDs(ctx context.Context, ids []string) ([]models.Article, error) {
+	if len(ids) == 0 {
+		return []models.Article{}, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
+		FROM articles
+		WHERE id = ANY($1)
+	`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("get articles by ids: %w", err)
+	}
+	defer rows.Close()
+
+	articles, err := scanArticleRows(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	byID := make(map[string]models.Article, len(articles))
+	for _, a := range articles {
+		byID[a.ID] = a
+	}
+
+	ordered := make([]models.Article, 0, len(ids))
+	for _, id := range ids {
+		if a, ok := byID[id]; ok {
+			ordered = append(ordered, a)
+		}
+	}
+	return ordered, nil
+}
+
+func (s *PGStore) Search(ctx context.Context, query string, limit int) ([]models.Article, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return s.List(ctx, "published")
+	}
+
+	pattern := "%" + trimmed + "%"
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
+		FROM articles
+		WHERE title ILIKE $1 OR kicker ILIKE $1 OR deck ILIKE $1 OR category ILIKE $1 OR excerpt ILIKE $1 OR $2 = ANY(tags)
+		ORDER BY published_at DESC LIMIT $3
+	`, pattern, trimmed, limit)
+	if err != nil {
+		return nil, fmt.Errorf("search articles: %w", err)
+	}
+	defer rows.Close()
+
+	return scanArticleRows(rows)
 }
 
 func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
@@ -598,6 +681,97 @@ func (s *PGStore) GetAllSettings(ctx context.Context) (map[string]any, error) {
 	return res, rows.Err()
 }
 
+func (s *PGStore) GetSection(ctx context.Context, sectionKey string) (*models.CuratedSection, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT section_key, article_ids, metadata, updated_at
+		FROM curated_sections
+		WHERE section_key = $1
+	`, sectionKey)
+
+	var (
+		key        string
+		articleIDs []string
+		metaJSON   []byte
+		updatedAt  time.Time
+	)
+
+	err := row.Scan(&key, &articleIDs, &metaJSON, &updatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get section %q: %w", sectionKey, err)
+	}
+
+	meta := make(map[string]any)
+	if len(metaJSON) > 0 {
+		_ = json.Unmarshal(metaJSON, &meta)
+	}
+
+	return &models.CuratedSection{
+		SectionKey: key,
+		ArticleIDs: articleIDs,
+		Metadata:   meta,
+		UpdatedAt:  updatedAt,
+	}, nil
+}
+
+func (s *PGStore) GetAllSections(ctx context.Context) ([]models.CuratedSection, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT section_key, article_ids, metadata, updated_at
+		FROM curated_sections
+		ORDER BY section_key ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("get all sections: %w", err)
+	}
+	defer rows.Close()
+
+	var sections []models.CuratedSection
+	for rows.Next() {
+		var (
+			key        string
+			articleIDs []string
+			metaJSON   []byte
+			updatedAt  time.Time
+		)
+		if err := rows.Scan(&key, &articleIDs, &metaJSON, &updatedAt); err != nil {
+			return nil, fmt.Errorf("scan section: %w", err)
+		}
+		meta := make(map[string]any)
+		if len(metaJSON) > 0 {
+			_ = json.Unmarshal(metaJSON, &meta)
+		}
+		sections = append(sections, models.CuratedSection{
+			SectionKey: key,
+			ArticleIDs: articleIDs,
+			Metadata:   meta,
+			UpdatedAt:  updatedAt,
+		})
+	}
+	return sections, rows.Err()
+}
+
+func (s *PGStore) SaveSection(ctx context.Context, sectionKey string, articleIDs []string, metadata map[string]any) error {
+	if articleIDs == nil {
+		articleIDs = []string{}
+	}
+	metaJSON, err := json.Marshal(metadata)
+	if err != nil {
+		metaJSON = []byte("{}")
+	}
+
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO curated_sections (section_key, article_ids, metadata, updated_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (section_key) DO UPDATE
+		SET article_ids = EXCLUDED.article_ids,
+		    metadata = EXCLUDED.metadata,
+		    updated_at = NOW()
+	`, sectionKey, articleIDs, metaJSON)
+	return err
+}
+
 type MemoryStore struct {
 	mu         sync.RWMutex
 	articles   map[string]models.Article
@@ -607,6 +781,7 @@ type MemoryStore struct {
 	users      map[string]*auth.User
 	passwords  map[string]string
 	settings   map[string][]byte
+	sections   map[string]models.CuratedSection
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -617,6 +792,67 @@ func NewMemoryStore() *MemoryStore {
 		users:      make(map[string]*auth.User),
 		passwords:  make(map[string]string),
 		settings:   make(map[string][]byte),
+		sections:   make(map[string]models.CuratedSection),
+	}
+
+	// Default curated sections
+	m.sections["hero_lead"] = models.CuratedSection{
+		SectionKey: "hero_lead",
+		ArticleIDs: []string{"2f405add-8bba-5261-99af-15feaa62754b"},
+		UpdatedAt:  time.Now(),
+	}
+	m.sections["hero_trending"] = models.CuratedSection{
+		SectionKey: "hero_trending",
+		ArticleIDs: []string{
+			"35588574-ec88-5a81-be90-8c46283c24de",
+			"decd08ac-ef71-54ee-ac58-fd2480c007fa",
+			"f10fad9c-c601-552e-a7b2-816b8c370ecc",
+		},
+		UpdatedAt: time.Now(),
+	}
+	m.sections["featured_updates"] = models.CuratedSection{
+		SectionKey: "featured_updates",
+		ArticleIDs: []string{
+			"25386df5-95e6-50ad-bc4c-3b6db589992d",
+			"12f9e7fb-8019-5edb-80e9-7789a9729176",
+			"d2065825-0408-5a7f-b4d0-559be9e67a9a",
+			"278198f8-3eee-55ce-8736-dcdd55c46cec",
+		},
+		UpdatedAt: time.Now(),
+	}
+	m.sections["perspectives"] = models.CuratedSection{
+		SectionKey: "perspectives",
+		ArticleIDs: []string{
+			"278198f8-3eee-55ce-8736-dcdd55c46cec",
+			"d2065825-0408-5a7f-b4d0-559be9e67a9a",
+			"f10fad9c-c601-552e-a7b2-816b8c370ecc",
+		},
+		UpdatedAt: time.Now(),
+	}
+	m.sections["dossier_lead"] = models.CuratedSection{
+		SectionKey: "dossier_lead",
+		ArticleIDs: []string{"f3033f02-9628-52d2-bef4-8b0814c6d835"},
+		UpdatedAt:  time.Now(),
+	}
+	m.sections["dossier_soundscapes"] = models.CuratedSection{
+		SectionKey: "dossier_soundscapes",
+		ArticleIDs: []string{"d641aeae-a6be-50f5-a13c-54c67bbf6e75"},
+		UpdatedAt:  time.Now(),
+	}
+	m.sections["dossier_gastronomy"] = models.CuratedSection{
+		SectionKey: "dossier_gastronomy",
+		ArticleIDs: []string{"0827a7d0-015b-5643-ac3d-4ccced2b933c"},
+		UpdatedAt:  time.Now(),
+	}
+	m.sections["dossier_radar"] = models.CuratedSection{
+		SectionKey: "dossier_radar",
+		ArticleIDs: []string{
+			"f2fc6ae3-16ec-51cc-bc8d-c9d2b4e4271f",
+			"ee3b36cb-8ce0-5f3c-bfae-3d077b882004",
+			"917d0345-9020-50e5-89eb-9cb1721d21fa",
+			"33a00b82-fd1f-5437-9317-0c951151d023",
+		},
+		UpdatedAt: time.Now(),
 	}
 
 	// Default development admin credentials
@@ -806,6 +1042,58 @@ func (m *MemoryStore) GetBySlug(ctx context.Context, slug string) (*models.Artic
 	return &a, nil
 }
 
+func (m *MemoryStore) GetByID(ctx context.Context, id string) (*models.Article, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, art := range m.articles {
+		if art.ID == id {
+			return &art, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (m *MemoryStore) GetByIDs(ctx context.Context, ids []string) ([]models.Article, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	byID := make(map[string]models.Article, len(m.articles))
+	for _, art := range m.articles {
+		byID[art.ID] = art
+	}
+	ordered := make([]models.Article, 0, len(ids))
+	for _, id := range ids {
+		if art, ok := byID[id]; ok {
+			ordered = append(ordered, art)
+		}
+	}
+	return ordered, nil
+}
+
+func (m *MemoryStore) Search(ctx context.Context, query string, limit int) ([]models.Article, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if limit <= 0 {
+		limit = 20
+	}
+	q := strings.ToLower(strings.TrimSpace(query))
+	var matches []models.Article
+	for _, art := range m.articles {
+		if q == "" {
+			matches = append(matches, art)
+		} else if strings.Contains(strings.ToLower(art.Title), q) ||
+			strings.Contains(strings.ToLower(art.Kicker), q) ||
+			strings.Contains(strings.ToLower(art.Deck), q) ||
+			strings.Contains(strings.ToLower(string(art.Category)), q) ||
+			strings.Contains(strings.ToLower(art.Excerpt), q) {
+			matches = append(matches, art)
+		}
+		if len(matches) >= limit {
+			break
+		}
+	}
+	return matches, nil
+}
+
 func (m *MemoryStore) Save(ctx context.Context, a *models.Article) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -955,5 +1243,43 @@ func (m *MemoryStore) GetAllSettings(ctx context.Context) (map[string]any, error
 		}
 	}
 	return res, nil
+}
+
+func (m *MemoryStore) GetSection(ctx context.Context, sectionKey string) (*models.CuratedSection, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	sec, ok := m.sections[sectionKey]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return &sec, nil
+}
+
+func (m *MemoryStore) GetAllSections(ctx context.Context) ([]models.CuratedSection, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	res := make([]models.CuratedSection, 0, len(m.sections))
+	for _, s := range m.sections {
+		res = append(res, s)
+	}
+	return res, nil
+}
+
+func (m *MemoryStore) SaveSection(ctx context.Context, sectionKey string, articleIDs []string, metadata map[string]any) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if articleIDs == nil {
+		articleIDs = []string{}
+	}
+	if metadata == nil {
+		metadata = make(map[string]any)
+	}
+	m.sections[sectionKey] = models.CuratedSection{
+		SectionKey: sectionKey,
+		ArticleIDs: articleIDs,
+		Metadata:   metadata,
+		UpdatedAt:  time.Now(),
+	}
+	return nil
 }
 

@@ -43,6 +43,7 @@ func main() {
 	var uploadStore store.UploadStore
 	var userStore store.UserStore
 	var settingsStore store.SettingsStore
+	var sectionStore store.SectionStore
 
 	if cfg.Database.URL != "" {
 		ctx := context.Background()
@@ -66,6 +67,7 @@ func main() {
 		uploadStore = pg
 		userStore = pg
 		settingsStore = pg
+		sectionStore = pg
 
 		// Seed PostgreSQL with canonical articles and default admin if not already present
 		if err := seed.Run(ctx, pg); err != nil {
@@ -77,6 +79,7 @@ func main() {
 		uploadStore = mem
 		userStore = mem
 		settingsStore = mem
+		sectionStore = mem
 
 		// Seed Memory store
 		if err := seed.Run(context.Background(), mem); err != nil {
@@ -106,6 +109,7 @@ func main() {
 	uploadHandler := handlers.NewUploadHandler(s3Storage, uploadStore)
 	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret, cfg.Supabase)
 	settingsHandler := handlers.NewSettingsHandler(settingsStore)
+	sectionsHandler := handlers.NewSectionsHandler(sectionStore, articleStore, s3Storage)
 
 	// Authentication routes
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
@@ -119,6 +123,12 @@ func main() {
 	mux.HandleFunc("POST /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("PUT /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("GET /api/links/resolve", articleHandler.ResolveLink)
+
+	// Curated layout sections routes
+	mux.HandleFunc("GET /api/sections", sectionsHandler.GetSections)
+	mux.HandleFunc("GET /api/sections/", sectionsHandler.GetSectionByKey)
+	mux.HandleFunc("POST /api/sections", sectionsHandler.UpdateSections)
+	mux.HandleFunc("PUT /api/sections", sectionsHandler.UpdateSections)
 
 	// Site settings & configurable copy routes
 	mux.HandleFunc("GET /api/settings", settingsHandler.GetSettings)
