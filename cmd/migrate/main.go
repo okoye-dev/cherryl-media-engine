@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/okoye-dev/cherryl-media-engine/internal/config"
 	"github.com/okoye-dev/cherryl-media-engine/internal/migrate"
+	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 	defer cancel()
 
 	log.Println("Connecting to Supabase PostgreSQL database...")
-	pool, err := pgxpool.New(ctx, dbURL)
+	pool, err := store.NewPool(ctx, dbURL)
 	if err != nil {
 		log.Fatalf("Failed to initialize database pool: %v", err)
 	}

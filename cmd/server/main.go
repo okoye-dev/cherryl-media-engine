@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/okoye-dev/cherryl-media-engine/internal/auth"
 	"github.com/okoye-dev/cherryl-media-engine/internal/config"
 	"github.com/okoye-dev/cherryl-media-engine/internal/handlers"
@@ -47,7 +46,7 @@ func main() {
 
 	if cfg.Database.URL != "" {
 		ctx := context.Background()
-		pool, err := pgxpool.New(ctx, cfg.Database.URL)
+		pool, err := store.NewPool(ctx, cfg.Database.URL)
 		if err != nil {
 			log.Fatalf("failed to connect to postgres: %v", err)
 		}

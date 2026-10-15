@@ -321,9 +321,15 @@ func (s *PGStore) Search(ctx context.Context, query string, limit int) ([]models
 }
 
 func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
-	blocksJSON, _ := json.Marshal(a.Body)
-	sourcesJSON, _ := json.Marshal(a.Sources)
-	socialJSON, _ := json.Marshal(a.SocialVariants)
+	blocksBytes, _ := json.Marshal(a.Body)
+	if a.Body == nil {
+		blocksBytes = []byte("[]")
+	}
+	sourcesBytes, _ := json.Marshal(a.Sources)
+	if a.Sources == nil {
+		sourcesBytes = []byte("[]")
+	}
+	socialBytes, _ := json.Marshal(a.SocialVariants)
 
 	var artID string
 	if _, err := uuid.Parse(a.ID); err == nil {
@@ -340,7 +346,7 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO articles (id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, updated_at, tags)
-		VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, '')::uuid, $16, $17, $18, $19, $20, $21, $22, NOW(), $23)
+		VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13, $14, NULLIF($15, '')::uuid, $16, $17, $18, $19, $20, $21, $22, NOW(), $23)
 		ON CONFLICT (slug) DO UPDATE
 		SET title = EXCLUDED.title,
 		    kicker = EXCLUDED.kicker,
@@ -362,7 +368,7 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		    ai_review_notes = EXCLUDED.ai_review_notes,
 		    published_at = EXCLUDED.published_at,
 		    updated_at = NOW()
-	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, blocksJSON, sourcesJSON, socialJSON, a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags)
+	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, string(blocksBytes), string(sourcesBytes), string(socialBytes), a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags)
 
 	if err != nil {
 		return fmt.Errorf("upsert article %q: %w", a.Slug, err)
@@ -482,8 +488,8 @@ func (s *PGStore) SaveCandidate(ctx context.Context, sStory *models.SuggestedSto
 
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO suggested_stories (headline, pitch, category, relevance_score, sources, extracted_facts, suggested_draft, status, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-	`, sStory.Headline, sStory.Pitch, sStory.Category, sStory.RelevanceScore, sourcesJSON, factsJSON, draftJSON, sStory.Status)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, NOW())
+	`, sStory.Headline, sStory.Pitch, sStory.Category, sStory.RelevanceScore, string(sourcesJSON), string(factsJSON), string(draftJSON), sStory.Status)
 	return err
 }
 
@@ -650,10 +656,10 @@ func (s *PGStore) GetSetting(ctx context.Context, key string) ([]byte, error) {
 func (s *PGStore) SetSetting(ctx context.Context, key string, val []byte) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO site_settings (key, value, updated_at)
-		VALUES ($1, $2, NOW())
+		VALUES ($1, $2::jsonb, NOW())
 		ON CONFLICT (key) DO UPDATE
 		SET value = EXCLUDED.value, updated_at = NOW()
-	`, key, val)
+	`, key, string(val))
 	return err
 }
 
@@ -763,12 +769,12 @@ func (s *PGStore) SaveSection(ctx context.Context, sectionKey string, articleIDs
 
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO curated_sections (section_key, article_ids, metadata, updated_at)
-		VALUES ($1, $2, $3, NOW())
+		VALUES ($1, $2, $3::jsonb, NOW())
 		ON CONFLICT (section_key) DO UPDATE
 		SET article_ids = EXCLUDED.article_ids,
 		    metadata = EXCLUDED.metadata,
 		    updated_at = NOW()
-	`, sectionKey, articleIDs, metaJSON)
+	`, sectionKey, articleIDs, string(metaJSON))
 	return err
 }
 
