@@ -29,6 +29,7 @@ type ContentBlock struct {
 	Quote      string `json:"quote,omitempty"`
 	Author     string `json:"author,omitempty"`
 	Context    string `json:"context,omitempty"`
+	StorageKey string `json:"storage_key,omitempty"`
 	Src        string `json:"src,omitempty"`
 	Alt        string `json:"alt,omitempty"`
 	Caption    string `json:"caption,omitempty"`
@@ -49,9 +50,10 @@ type Author struct {
 }
 
 type FeaturedImage struct {
-	URL     string `json:"url"`
-	Caption string `json:"caption,omitempty"`
-	Credit  string `json:"credit,omitempty"`
+	StorageKey string `json:"storage_key,omitempty"`
+	URL        string `json:"url"`
+	Caption    string `json:"caption,omitempty"`
+	Credit     string `json:"credit,omitempty"`
 }
 
 type SocialVariants struct {

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/okoye-dev/cherryl-media-engine/internal/storage"
@@ -45,19 +45,68 @@ func sanitizeFilename(name string) string {
 	return cleaned
 }
 
+// MediaNamespace is the fixed UUID v5 namespace for Cherryl Media assets.
+// It ensures that deterministic UUIDs are consistently generated across all uploads and migrations.
+var MediaNamespace = uuid.MustParse("c7e841aa-8521-4f10-91a5-8314e3650226")
+
+// GenerateDeterministicKey generates an idempotent, deterministic UUID v5
+// so file keys are not dependent on where they are stored, enabling reproducible migrations.
+func GenerateDeterministicKey(fileName, contentType string, size int64, checksum, sourceID, customKey string) (uuid.UUID, string) {
+	if customKey != "" {
+		cleanKey := strings.TrimPrefix(customKey, "/")
+		base := strings.TrimSuffix(path.Base(cleanKey), path.Ext(cleanKey))
+		if u, err := uuid.Parse(base); err == nil {
+			return u, cleanKey
+		}
+	}
+
+	var input string
+	if checksum != "" {
+		input = fmt.Sprintf("checksum:%s", checksum)
+	} else if sourceID != "" {
+		input = fmt.Sprintf("source:%s", sourceID)
+	} else {
+		cleanName := strings.ToLower(sanitizeFilename(fileName))
+		input = fmt.Sprintf("file:%s:%d:%s", cleanName, size, contentType)
+	}
+
+	id := uuid.NewSHA1(MediaNamespace, []byte(input))
+	ext := strings.ToLower(path.Ext(fileName))
+	if ext == "" {
+		switch contentType {
+		case "image/webp":
+			ext = ".webp"
+		case "image/jpeg", "image/jpg":
+			ext = ".jpg"
+		case "image/png":
+			ext = ".png"
+		case "video/mp4":
+			ext = ".mp4"
+		default:
+			ext = ".bin"
+		}
+	}
+	storageKey := fmt.Sprintf("media/%s%s", id.String(), ext)
+	return id, storageKey
+}
+
 type PresignUploadRequest struct {
 	Name        string `json:"name"`
 	Size        int64  `json:"size"`
 	ContentType string `json:"content_type"`
+	Checksum    string `json:"checksum,omitempty"`   // Optional SHA-256 or content hash
+	SourceID    string `json:"source_id,omitempty"`  // Optional migration identifier (e.g. WP attachment ID or legacy path)
+	CustomKey   string `json:"custom_key,omitempty"` // Optional explicit deterministic key
 }
 
 type PresignUploadResponse struct {
-	UploadURL  string `json:"upload_url"`
-	StorageKey string `json:"storage_key"`
-	PublicURL  string `json:"public_url"`
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	ExpiresIn  int    `json:"expires_in"`
+	UploadURL     string `json:"upload_url"`
+	StorageKey    string `json:"storage_key"`
+	PublicURL     string `json:"public_url"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	ExpiresIn     int    `json:"expires_in"`
+	AlreadyExists bool   `json:"already_exists,omitempty"`
 }
 
 type UploadHandler struct {
@@ -90,16 +139,34 @@ func (h *UploadHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileName := sanitizeFilename(req.Name)
-	fileID := uuid.New().String()
-	ext := path.Ext(fileName)
-	storageKey := fmtKey(fileID, ext)
-
 	contentType := req.ContentType
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
+	fileID, storageKey := GenerateDeterministicKey(fileName, contentType, req.Size, req.Checksum, req.SourceID, req.CustomKey)
+
 	if h.storage.IsConfigured() {
+		// Idempotency check: see if this exact file already landed in S3
+		if existingSize, err := h.storage.GetFileSize(r.Context(), storageKey); err == nil && existingSize > 0 {
+			publicURL := h.storage.GetPublicURL(storageKey)
+			if h.store != nil {
+				_ = h.store.ConfirmUpload(r.Context(), storageKey, existingSize, publicURL)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(PresignUploadResponse{
+				UploadURL:     "",
+				StorageKey:    storageKey,
+				PublicURL:     publicURL,
+				ID:            fileID.String(),
+				Name:          fileName,
+				ExpiresIn:     0,
+				AlreadyExists: true,
+			})
+			return
+		}
+
 		uploadURL, err := h.storage.GetPresignedUploadURL(r.Context(), storageKey, req.Size, contentType)
 		if err != nil {
 			log.Printf("presign error: %v", err)
@@ -117,7 +184,7 @@ func (h *UploadHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 			UploadURL:  uploadURL,
 			StorageKey: storageKey,
 			PublicURL:  publicURL,
-			ID:         fileID,
+			ID:         fileID.String(),
 			Name:       fileName,
 			ExpiresIn:  int(storage.UploadPresignTTL.Seconds()),
 		})
@@ -133,7 +200,7 @@ func (h *UploadHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 		UploadURL:  localUploadURL,
 		StorageKey: storageKey,
 		PublicURL:  publicURL,
-		ID:         fileID,
+		ID:         fileID.String(),
 		Name:       fileName,
 		ExpiresIn:  int(storage.UploadPresignTTL.Seconds()),
 	})
@@ -235,7 +302,7 @@ func (h *UploadHandler) ConfirmUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func fmtKey(id, ext string) string {
-	now := time.Now().UTC()
-	return path.Join("media", now.Format("2006/01"), id+ext)
+func CleanKey(key string) string {
+	return strings.TrimPrefix(key, "/")
 }
+

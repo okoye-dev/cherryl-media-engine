@@ -36,3 +36,19 @@ func CleanArticleSlug(targetURL string) string {
 	trimmed = strings.TrimPrefix(trimmed, "/")
 	return trimmed
 }
+
+// ExtractStorageKey extracts the relative storage path (e.g. "media/uuid.webp")
+// from full CDN URLs, absolute paths, or local fallback URLs.
+func ExtractStorageKey(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(raw); err == nil && parsed.Path != "" {
+		raw = parsed.Path
+	}
+	raw = strings.TrimPrefix(raw, "/")
+	raw = strings.TrimPrefix(raw, "uploads/")
+	return raw
+}
+

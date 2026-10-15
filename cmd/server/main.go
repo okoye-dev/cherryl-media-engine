@@ -81,7 +81,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	articleHandler := handlers.NewArticleHandler(articleStore)
+	articleHandler := handlers.NewArticleHandler(articleStore, s3Storage)
 	uploadHandler := handlers.NewUploadHandler(s3Storage, uploadStore)
 	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret)
 

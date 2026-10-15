@@ -10,17 +10,67 @@ import (
 	"time"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
+	"github.com/okoye-dev/cherryl-media-engine/internal/storage"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 	"github.com/okoye-dev/cherryl-media-engine/internal/urlutil"
 )
 
 type ArticleHandler struct {
-	store store.ArticleStore
+	store   store.ArticleStore
+	storage storage.Storage
 }
 
-func NewArticleHandler(s store.ArticleStore) *ArticleHandler {
+func NewArticleHandler(s store.ArticleStore, st storage.Storage) *ArticleHandler {
 	return &ArticleHandler{
-		store: s,
+		store:   s,
+		storage: st,
+	}
+}
+
+// ResolveMedia dynamically builds public URLs using the active storage configuration
+// so the database only needs to store the location-independent storage key.
+func (h *ArticleHandler) ResolveMedia(art *models.Article) {
+	if art == nil || h.storage == nil {
+		return
+	}
+
+	if art.FeaturedImage.StorageKey != "" {
+		art.FeaturedImage.URL = h.storage.GetPublicURL(art.FeaturedImage.StorageKey)
+	} else if key := urlutil.ExtractStorageKey(art.FeaturedImage.URL); strings.HasPrefix(key, "media/") {
+		art.FeaturedImage.StorageKey = key
+		art.FeaturedImage.URL = h.storage.GetPublicURL(key)
+	}
+
+	for i := range art.Body {
+		block := &art.Body[i]
+		if block.Type == "image" || block.Type == "video" {
+			if block.StorageKey != "" {
+				block.Src = h.storage.GetPublicURL(block.StorageKey)
+			} else if key := urlutil.ExtractStorageKey(block.Src); strings.HasPrefix(key, "media/") {
+				block.StorageKey = key
+				block.Src = h.storage.GetPublicURL(key)
+			}
+		}
+	}
+}
+
+// NormalizeMediaKeys ensures storage keys are extracted from URLs so that
+// articles remain decoupled from the physical CDN/host location.
+func (h *ArticleHandler) NormalizeMediaKeys(art *models.Article) {
+	if art.FeaturedImage.StorageKey == "" && art.FeaturedImage.URL != "" {
+		key := urlutil.ExtractStorageKey(art.FeaturedImage.URL)
+		if strings.HasPrefix(key, "media/") {
+			art.FeaturedImage.StorageKey = key
+		}
+	}
+	for i := range art.Body {
+		block := &art.Body[i]
+		if (block.Type == "image" || block.Type == "video") && block.StorageKey == "" && block.Src != "" {
+			key := urlutil.ExtractStorageKey(block.Src)
+			if strings.HasPrefix(key, "media/") {
+				block.StorageKey = key
+			}
+		}
 	}
 }
 
@@ -30,6 +80,10 @@ func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, `{"error":"failed to fetch articles"}`, http.StatusInternalServerError)
 		return
+	}
+
+	for i := range articles {
+		h.ResolveMedia(&articles[i])
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -61,6 +115,8 @@ func (h *ArticleHandler) PublishArticle(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.ResolveMedia(art)
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"success": true,
@@ -86,6 +142,8 @@ func (h *ArticleHandler) GetArticle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"failed to fetch article"}`, http.StatusInternalServerError)
 		return
 	}
+
+	h.ResolveMedia(art)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(art)
@@ -118,10 +176,14 @@ func (h *ArticleHandler) SaveArticle(w http.ResponseWriter, r *http.Request) {
 		art.PublishedAt = time.Now()
 	}
 
+	h.NormalizeMediaKeys(&art)
+
 	if err := h.store.Save(r.Context(), &art); err != nil {
 		http.Error(w, `{"error":"failed to save article: `+err.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
+
+	h.ResolveMedia(&art)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
