@@ -1,0 +1,5 @@
+bin/
+uploads/
+.env*
+*.local
+.DS_Store
