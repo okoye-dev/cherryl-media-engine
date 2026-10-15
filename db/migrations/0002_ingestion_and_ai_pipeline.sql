@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS sources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
-    type TEXT NOT NULL DEFAULT 'rss', -- 'rss', 'scraper', 'api', 'youtube', 'social'
+    type TEXT NOT NULL DEFAULT 'rss', -- 'rss', 'scraper', 'api', 'social'
     feed_url TEXT NOT NULL UNIQUE,
     site_url TEXT,
     category_hint TEXT,
