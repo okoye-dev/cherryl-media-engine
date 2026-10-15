@@ -26,7 +26,7 @@ func GetAllWebsiteArticles() []models.Article {
 			Kicker:       "POLICY DEVELOPMENT · GOVERNANCE",
 			Deck:         "Confirmed policy shifts introduce immediate tariff restructuring, regional mini-grid guarantees, and multi-state transmission oversight protocols.",
 			Category:     models.PillarCategory("nigerian-current-affairs"),
-			CategoryName: "Nigerian Current Affairs",
+			CategoryName: "Current Affairs",
 			Author: models.Author{
 				Name: "Tunde Oladipo",
 				Role: "Senior Policy Correspondent",
@@ -80,7 +80,7 @@ func GetAllWebsiteArticles() []models.Article {
 					Type: "internal_link",
 					Title: "NERC Releases Reclassified State Feeder Bands and Consumer Metering Schedule",
 					Slug: "nigeria-electricity-regulatory-commission-updates-feeder-bands",
-					Category: "Practical Nigerian Updates",
+					Category: "Practical Updates",
 					Deck: "Official public-service advisory detailing guaranteed supply hours, revised band thresholds, and direct customer dispute mechanisms.",
 					ReadTime: "3 min read",
 				},
@@ -127,7 +127,7 @@ func GetAllWebsiteArticles() []models.Article {
 			Kicker:       "CONSUMER ADVISORY · PUBLIC SERVICE",
 			Deck:         "Official public-service advisory detailing guaranteed supply hours, revised band thresholds, and direct customer dispute mechanisms.",
 			Category:     models.PillarCategory("practical-nigerian-updates"),
-			CategoryName: "Practical Nigerian Updates",
+			CategoryName: "Practical Updates",
 			Author: models.Author{
 				Name: "Bisi Alabi",
 				Role: "Public Service & Utility Reporter",
@@ -343,7 +343,7 @@ func GetAllWebsiteArticles() []models.Article {
 			Kicker:       "PUBLIC SERVICE · INFRASTRUCTURE",
 			Deck:         "Technical directives mandate passenger coach telemetry and unified regional corridor signaling systems across southern and middle-belt transit networks.",
 			Category:     models.PillarCategory("nigerian-current-affairs"),
-			CategoryName: "Nigerian Current Affairs",
+			CategoryName: "Current Affairs",
 			Author: models.Author{
 				Name: "Tunde Oladipo",
 				Role: "Senior Policy Correspondent",
@@ -392,7 +392,7 @@ func GetAllWebsiteArticles() []models.Article {
 			Kicker:       "PRACTICAL ADVISORY",
 			Deck:         "Ten million prepaid meters to receive automatic over-the-air firmware upgrades; distribution utilities publish schedule by state and ward.",
 			Category:     models.PillarCategory("practical-nigerian-updates"),
-			CategoryName: "Practical Nigerian Updates",
+			CategoryName: "Practical Updates",
 			Author: models.Author{
 				Name: "Bisi Alabi",
 				Role: "Public Service & Utility Reporter",
@@ -728,7 +728,7 @@ func GetAllWebsiteArticles() []models.Article {
 			Kicker:       "ARCHITECTURE & SUSTAINABILITY",
 			Deck:         "Contemporary architects fuse compressed earth blocks, wind towers, and bioclimatic design to drop indoor temperatures without air conditioning.",
 			Category:     models.PillarCategory("nigerian-current-affairs"),
-			CategoryName: "Nigerian Current Affairs",
+			CategoryName: "Current Affairs",
 			Author: models.Author{
 				Name: "Tunde Oladipo",
 				Role: "Senior Policy Correspondent",
@@ -824,7 +824,7 @@ func GetAllWebsiteArticles() []models.Article {
 			Kicker:       "CLIMATE GOVERNANCE · PUBLIC POLICY",
 			Deck:         "Sixteen ecological disaster-vulnerable states receive targeted matching capital for flood plain defense, mangrove restoration, and municipal drainage infrastructure.",
 			Category:     models.PillarCategory("nigerian-current-affairs"),
-			CategoryName: "Nigerian Current Affairs",
+			CategoryName: "Current Affairs",
 			Author: models.Author{
 				Name: "Amina Bello",
 				Role: "Environment & Policy Desk",
@@ -882,7 +882,7 @@ func GetAllWebsiteArticles() []models.Article {
 			Kicker:       "TRANSIT REGULATIONS · PUBLIC SAFETY",
 			Deck:         "Interstate transport operators must migrate paper logbooks to real-time QR passenger verification systems by mid-quarter to ensure rapid passenger welfare coverage.",
 			Category:     models.PillarCategory("practical-nigerian-updates"),
-			CategoryName: "Practical Nigerian Updates",
+			CategoryName: "Practical Updates",
 			Author: models.Author{
 				Name: "Chuka Obi",
 				Role: "Public Service Correspondent",
@@ -940,7 +940,7 @@ func GetAllWebsiteArticles() []models.Article {
 			Kicker:       "CONSUMER ADVISORY · ENERGY",
 			Deck:         "Inverters, lithium iron phosphate battery packs, and photovoltaic panels must carry tamper-proof holographic verification seals starting next month.",
 			Category:     models.PillarCategory("practical-nigerian-updates"),
-			CategoryName: "Practical Nigerian Updates",
+			CategoryName: "Practical Updates",
 			Author: models.Author{
 				Name: "Tunde Oladipo",
 				Role: "Senior Policy Correspondent",
