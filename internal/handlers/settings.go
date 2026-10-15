@@ -20,7 +20,7 @@ func NewSettingsHandler(s store.SettingsStore) *SettingsHandler {
 func DefaultEditorialCopy() map[string]any {
 	return map[string]any{
 		"hero": map[string]any{
-			"editionBadge": "CHERRYL MEDIA · DAILY EDITION",
+			"editionBadge": "DAILY EDITION",
 			"titleLead":    "Independent ",
 			"titleAccent":  "journalism",
 			"titleTrail":   " & digital media network.",
@@ -31,9 +31,9 @@ func DefaultEditorialCopy() map[string]any {
 			"customNotice": "BREAKING: Federal Executive Council ratifies state electricity market guidelines and sovereign payment assurance frameworks.",
 		},
 		"dossier": map[string]any{
-			"issueBadge":  "WEEKEND DOSSIER · ISSUE Nº 18",
-			"heading":     "Culture, Cinema & Critical Essays.",
-			"subheading":  "Investigative photo essays, music production chronicles, and contemporary West African thought.",
+			"issueBadge":  "WEEKEND EDITION · ISSUE #18",
+			"heading":     "Culture, Cinema & In-Depth Features",
+			"subheading":  "Features, music chronicles, food heritage, and modern Nigerian narratives.",
 		},
 		"network": map[string]any{
 			"headline":     "Multi-Channel Media Distribution Network",

@@ -13,7 +13,7 @@ VALUES (
     'editorial_copy',
     '{
         "hero": {
-            "editionBadge": "CHERRYL MEDIA · DAILY EDITION",
+            "editionBadge": "DAILY EDITION",
             "titleLead": "Independent ",
             "titleAccent": "journalism",
             "titleTrail": " & digital media network.",
@@ -24,9 +24,9 @@ VALUES (
             "customNotice": "BREAKING: Federal Executive Council ratifies state electricity market guidelines and sovereign payment assurance frameworks."
         },
         "dossier": {
-            "issueBadge": "WEEKEND DOSSIER · ISSUE Nº 18",
-            "heading": "Culture, Cinema & Critical Essays.",
-            "subheading": "Investigative photo essays, music production chronicles, and contemporary West African thought."
+            "issueBadge": "WEEKEND EDITION · ISSUE #18",
+            "heading": "Culture, Cinema & In-Depth Features",
+            "subheading": "Features, music chronicles, food heritage, and modern Nigerian narratives."
         },
         "network": {
             "headline": "Multi-Channel Media Distribution Network",

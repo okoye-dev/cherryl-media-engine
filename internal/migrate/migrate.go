@@ -21,10 +21,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	defer conn.Release()
 
-	if _, err := conn.Exec(ctx, "select pg_advisory_lock($1)", advisoryLockID); err != nil {
-		return fmt.Errorf("acquire migration lock: %w", err)
+	if _, err := conn.Exec(ctx, "select pg_advisory_lock($1)", advisoryLockID); err == nil {
+		defer conn.Exec(ctx, "select pg_advisory_unlock($1)", advisoryLockID)
+	} else {
+		log.Printf("migrate: advisory lock skipped (transaction pooling mode): %v", err)
 	}
-	defer conn.Exec(ctx, "select pg_advisory_unlock($1)", advisoryLockID)
 
 	if _, err := conn.Exec(ctx, `create table if not exists schema_migrations (
 		version text primary key,
