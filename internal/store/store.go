@@ -19,6 +19,10 @@ type ArticleStore interface {
 	List(ctx context.Context) ([]models.Article, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Article, error)
 	Save(ctx context.Context, a *models.Article) error
+	ListCandidates(ctx context.Context) ([]models.SuggestedStory, error)
+	GetCandidate(ctx context.Context, id string) (*models.SuggestedStory, error)
+	SaveCandidate(ctx context.Context, s *models.SuggestedStory) error
+	ListSources(ctx context.Context) ([]models.Source, error)
 }
 
 type UploadStore interface {
@@ -35,7 +39,7 @@ func NewPGStore(pool *pgxpool.Pool) *PGStore {
 
 func (s *PGStore) List(ctx context.Context) ([]models.Article, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, slug, title, deck, category, cover_image, blocks, read_time, status, published_at, created_at
+		SELECT id, slug, title, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, published_at, created_at
 		FROM articles
 		ORDER BY created_at DESC
 	`)
@@ -48,12 +52,12 @@ func (s *PGStore) List(ctx context.Context) ([]models.Article, error) {
 	for rows.Next() {
 		var (
 			id, slug, title, category, status string
-			deck, coverImage, readTime        *string
-			blocksJSON                        []byte
-			publishedAt, createdAt            *time.Time
+			deck, coverImage, authorName, authorRole, readTime, candidateID, aiNotes *string
+			blocksJSON, sourcesJSON, socialJSON []byte
+			publishedAt, createdAt *time.Time
 		)
 
-		err := rows.Scan(&id, &slug, &title, &deck, &category, &coverImage, &blocksJSON, &readTime, &status, &publishedAt, &createdAt)
+		err := rows.Scan(&id, &slug, &title, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &publishedAt, &createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("scan article: %w", err)
 		}
@@ -72,8 +76,20 @@ func (s *PGStore) List(ctx context.Context) ([]models.Article, error) {
 		if coverImage != nil {
 			art.FeaturedImage.URL = *coverImage
 		}
+		if authorName != nil {
+			art.Author.Name = *authorName
+		}
+		if authorRole != nil {
+			art.Author.Role = *authorRole
+		}
 		if readTime != nil {
 			art.ReadTime = *readTime
+		}
+		if candidateID != nil {
+			art.CandidateID = *candidateID
+		}
+		if aiNotes != nil {
+			art.AIReviewNotes = *aiNotes
 		}
 		if publishedAt != nil {
 			art.PublishedAt = *publishedAt
@@ -84,6 +100,12 @@ func (s *PGStore) List(ctx context.Context) ([]models.Article, error) {
 		if len(blocksJSON) > 0 {
 			_ = json.Unmarshal(blocksJSON, &art.Body)
 		}
+		if len(sourcesJSON) > 0 {
+			_ = json.Unmarshal(sourcesJSON, &art.Sources)
+		}
+		if len(socialJSON) > 0 {
+			_ = json.Unmarshal(socialJSON, &art.SocialVariants)
+		}
 
 		articles = append(articles, art)
 	}
@@ -93,19 +115,19 @@ func (s *PGStore) List(ctx context.Context) ([]models.Article, error) {
 
 func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, slug, title, deck, category, cover_image, blocks, read_time, status, published_at, created_at
+		SELECT id, slug, title, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, published_at, created_at
 		FROM articles
 		WHERE slug = $1
 	`, slug)
 
 	var (
 		id, sl, title, category, status string
-		deck, coverImage, readTime      *string
-		blocksJSON                      []byte
-		publishedAt, createdAt          *time.Time
+		deck, coverImage, authorName, authorRole, readTime, candidateID, aiNotes *string
+		blocksJSON, sourcesJSON, socialJSON []byte
+		publishedAt, createdAt *time.Time
 	)
 
-	err := row.Scan(&id, &sl, &title, &deck, &category, &coverImage, &blocksJSON, &readTime, &status, &publishedAt, &createdAt)
+	err := row.Scan(&id, &sl, &title, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &publishedAt, &createdAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -127,8 +149,20 @@ func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, 
 	if coverImage != nil {
 		art.FeaturedImage.URL = *coverImage
 	}
+	if authorName != nil {
+		art.Author.Name = *authorName
+	}
+	if authorRole != nil {
+		art.Author.Role = *authorRole
+	}
 	if readTime != nil {
 		art.ReadTime = *readTime
+	}
+	if candidateID != nil {
+		art.CandidateID = *candidateID
+	}
+	if aiNotes != nil {
+		art.AIReviewNotes = *aiNotes
 	}
 	if publishedAt != nil {
 		art.PublishedAt = *publishedAt
@@ -139,15 +173,20 @@ func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, 
 	if len(blocksJSON) > 0 {
 		_ = json.Unmarshal(blocksJSON, &art.Body)
 	}
+	if len(sourcesJSON) > 0 {
+		_ = json.Unmarshal(sourcesJSON, &art.Sources)
+	}
+	if len(socialJSON) > 0 {
+		_ = json.Unmarshal(socialJSON, &art.SocialVariants)
+	}
 
 	return art, nil
 }
 
 func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
-	blocksJSON, err := json.Marshal(a.Body)
-	if err != nil {
-		blocksJSON = []byte("[]")
-	}
+	blocksJSON, _ := json.Marshal(a.Body)
+	sourcesJSON, _ := json.Marshal(a.Sources)
+	socialJSON, _ := json.Marshal(a.SocialVariants)
 
 	if a.ID == "" {
 		a.ID = fmt.Sprintf("art-%d", time.Now().UnixNano())
@@ -156,25 +195,183 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		a.CreatedAt = time.Now()
 	}
 
-	_, err = s.pool.Exec(ctx, `
-		INSERT INTO articles (slug, title, deck, category, cover_image, blocks, read_time, status, published_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO articles (slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, published_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULLIF($14, '')::uuid, $15, $16, $17, NOW())
 		ON CONFLICT (slug) DO UPDATE
 		SET title = EXCLUDED.title,
+		    kicker = EXCLUDED.kicker,
 		    deck = EXCLUDED.deck,
 		    category = EXCLUDED.category,
 		    cover_image = EXCLUDED.cover_image,
+		    author_name = EXCLUDED.author_name,
+		    author_role = EXCLUDED.author_role,
 		    blocks = EXCLUDED.blocks,
+		    sources = EXCLUDED.sources,
+		    social_variants = EXCLUDED.social_variants,
 		    read_time = EXCLUDED.read_time,
 		    status = EXCLUDED.status,
+		    ai_review_notes = EXCLUDED.ai_review_notes,
 		    published_at = EXCLUDED.published_at,
 		    updated_at = NOW()
-	`, a.Slug, a.Title, a.Deck, string(a.Category), a.FeaturedImage.URL, blocksJSON, a.ReadTime, string(a.Status), a.PublishedAt, a.CreatedAt)
+	`, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, blocksJSON, sourcesJSON, socialJSON, a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.PublishedAt, a.CreatedAt)
 
 	if err != nil {
 		return fmt.Errorf("upsert article %q: %w", a.Slug, err)
 	}
 	return nil
+}
+
+func (s *PGStore) ListCandidates(ctx context.Context) ([]models.SuggestedStory, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, headline, pitch, category, relevance_score, sources, extracted_facts, suggested_draft, status, article_id, created_at
+		FROM suggested_stories
+		ORDER BY relevance_score DESC, created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list suggested stories: %w", err)
+	}
+	defer rows.Close()
+
+	var list []models.SuggestedStory
+	for rows.Next() {
+		var (
+			id, headline, category, status string
+			pitch, articleID               *string
+			relScore                       float64
+			sourcesJSON, factsJSON, draftJSON []byte
+			createdAt                      time.Time
+		)
+
+		err := rows.Scan(&id, &headline, &pitch, &category, &relScore, &sourcesJSON, &factsJSON, &draftJSON, &status, &articleID, &createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("scan suggested story: %w", err)
+		}
+
+		item := models.SuggestedStory{
+			ID:             id,
+			Headline:       headline,
+			Category:       category,
+			RelevanceScore: relScore,
+			Status:         status,
+			CreatedAt:      createdAt,
+		}
+		if pitch != nil {
+			item.Pitch = *pitch
+		}
+		if articleID != nil {
+			item.ArticleID = *articleID
+		}
+		if len(sourcesJSON) > 0 {
+			_ = json.Unmarshal(sourcesJSON, &item.Sources)
+		}
+		if len(factsJSON) > 0 {
+			_ = json.Unmarshal(factsJSON, &item.ExtractedFacts)
+		}
+		if len(draftJSON) > 0 {
+			_ = json.Unmarshal(draftJSON, &item.SuggestedDraft)
+		}
+
+		list = append(list, item)
+	}
+	return list, nil
+}
+
+func (s *PGStore) GetCandidate(ctx context.Context, id string) (*models.SuggestedStory, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, headline, pitch, category, relevance_score, sources, extracted_facts, suggested_draft, status, article_id, created_at
+		FROM suggested_stories
+		WHERE id = $1
+	`, id)
+
+	var (
+		cId, headline, category, status string
+		pitch, articleID               *string
+		relScore                       float64
+		sourcesJSON, factsJSON, draftJSON []byte
+		createdAt                      time.Time
+	)
+
+	err := row.Scan(&cId, &headline, &pitch, &category, &relScore, &sourcesJSON, &factsJSON, &draftJSON, &status, &articleID, &createdAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get candidate: %w", err)
+	}
+
+	item := &models.SuggestedStory{
+		ID:             cId,
+		Headline:       headline,
+		Category:       category,
+		RelevanceScore: relScore,
+		Status:         status,
+		CreatedAt:      createdAt,
+	}
+	if pitch != nil {
+		item.Pitch = *pitch
+	}
+	if articleID != nil {
+		item.ArticleID = *articleID
+	}
+	if len(sourcesJSON) > 0 {
+		_ = json.Unmarshal(sourcesJSON, &item.Sources)
+	}
+	if len(factsJSON) > 0 {
+		_ = json.Unmarshal(factsJSON, &item.ExtractedFacts)
+	}
+	if len(draftJSON) > 0 {
+		_ = json.Unmarshal(draftJSON, &item.SuggestedDraft)
+	}
+
+	return item, nil
+}
+
+func (s *PGStore) SaveCandidate(ctx context.Context, sStory *models.SuggestedStory) error {
+	sourcesJSON, _ := json.Marshal(sStory.Sources)
+	factsJSON, _ := json.Marshal(sStory.ExtractedFacts)
+	draftJSON, _ := json.Marshal(sStory.SuggestedDraft)
+
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO suggested_stories (headline, pitch, category, relevance_score, sources, extracted_facts, suggested_draft, status, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+	`, sStory.Headline, sStory.Pitch, sStory.Category, sStory.RelevanceScore, sourcesJSON, factsJSON, draftJSON, sStory.Status)
+	return err
+}
+
+func (s *PGStore) ListSources(ctx context.Context) ([]models.Source, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, name, type, feed_url, site_url, category_hint, reliability_score, active, last_fetched_at, created_at
+		FROM sources
+		WHERE active = true
+		ORDER BY reliability_score DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sources []models.Source
+	for rows.Next() {
+		var src models.Source
+		var siteURL, catHint *string
+		var lastFetched *time.Time
+		err := rows.Scan(&src.ID, &src.Name, &src.Type, &src.FeedURL, &siteURL, &catHint, &src.ReliabilityScore, &src.Active, &lastFetched, &src.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if siteURL != nil {
+			src.SiteURL = *siteURL
+		}
+		if catHint != nil {
+			src.CategoryHint = *catHint
+		}
+		if lastFetched != nil {
+			src.LastFetchedAt = *lastFetched
+		}
+		sources = append(sources, src)
+	}
+	return sources, nil
 }
 
 func (s *PGStore) RecordUpload(ctx context.Context, key, name string, size int64, contentType, publicURL string) error {
@@ -191,17 +388,21 @@ func (s *PGStore) RecordUpload(ctx context.Context, key, name string, size int64
 }
 
 type MemoryStore struct {
-	mu       sync.RWMutex
-	articles map[string]models.Article
-	uploads  map[string]string
+	mu         sync.RWMutex
+	articles   map[string]models.Article
+	candidates map[string]models.SuggestedStory
+	sources    []models.Source
+	uploads    map[string]string
 }
 
 func NewMemoryStore() *MemoryStore {
 	m := &MemoryStore{
-		articles: make(map[string]models.Article),
-		uploads:  make(map[string]string),
+		articles:   make(map[string]models.Article),
+		candidates: make(map[string]models.SuggestedStory),
+		uploads:    make(map[string]string),
 	}
-	// Initial seed
+
+	// Sample article
 	m.articles["federal-executive-council-approves-unified-energy-framework"] = models.Article{
 		ID:           "sample-01",
 		Slug:         "federal-executive-council-approves-unified-energy-framework",
@@ -219,11 +420,123 @@ func NewMemoryStore() *MemoryStore {
 			Caption: "Federal Executive Council in session, Abuja.",
 			Credit:  "State House Photo",
 		},
+		Sources: []models.SourceCitation{
+			{
+				SourceName:   "State House Official Press Release",
+				URL:          "https://statehouse.gov.ng/releases/energy-framework-2026",
+				PublishedAt:  "2026-10-14",
+				ClaimSummary: "Approval of revised multi-year tariff framework and sovereign backing for state electricity boards.",
+			},
+			{
+				SourceName:   "Federal Ministry of Power Briefing",
+				URL:          "https://power.gov.ng/news/grid-code-revisions",
+				PublishedAt:  "2026-10-14",
+				ClaimSummary: "Technical guidelines for decentralized distribution licensing across 36 states.",
+			},
+		},
+		SocialVariants: models.SocialVariants{
+			X:          "Nigeria’s Federal Executive Council has finalized unified energy and electricity distribution guidelines. Here is what state governments and commercial power consumers need to know:",
+			Facebook:   "Key update for Nigerian consumers: The Federal Executive Council has officially endorsed the new national electricity and distribution framework.",
+			LinkedIn:   "The Federal Executive Council has formalized revised grid codes and decentralized distribution licensing guidelines. Read our full regulatory breakdown for institutions and investors.",
+			Newsletter: "Electricity Governance Overhaul: What the new FEC energy guidelines mean for state utility transition.",
+		},
 		ReadTime:    "4 min read",
 		Status:      models.StatusPublished,
 		PublishedAt: time.Now(),
 		CreatedAt:   time.Now(),
 	}
+
+	// Sample AI-discovered story candidates
+	m.candidates["cand-01"] = models.SuggestedStory{
+		ID:             "cand-01",
+		Headline:       "NERC Releases Revised Q4 Tariff Schedule for Commercial and Industrial Feeders",
+		Pitch:          "Tariff adjustments focused on manufacturing clusters in Ikeja, Agbara, and Aba to protect production margins.",
+		Category:       "nigerian-current-affairs",
+		RelevanceScore: 0.94,
+		Sources: []models.SourceCitation{
+			{
+				SourceName:   "NERC Regulatory Order #2026/089",
+				URL:          "https://nerc.gov.ng/orders/q4-tariff-update",
+				PublishedAt:  "2026-10-15T08:30:00Z",
+				ClaimSummary: "Rate stabilization clause activated for industrial clusters consuming >50MW monthly.",
+			},
+			{
+				SourceName:   "Manufacturers Association of Nigeria (MAN)",
+				URL:          "https://manufacturersnigeria.org/press/energy-costs",
+				PublishedAt:  "2026-10-15T09:15:00Z",
+				ClaimSummary: "MAN commendation on targeted power subsidy for key agro-processing zones.",
+			},
+		},
+		ExtractedFacts: []string{
+			"Targeted industrial clusters will receive capped transmission charges through December.",
+			"State electricity regulatory boards (SERCs) in Lagos, Kaduna, and Enugu assume supervisory authority on Nov 1.",
+			"DisCos instructed to deploy smart meters to 100% of industrial feeder points within 60 days.",
+		},
+		Status:    "discovered",
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+	}
+
+	m.candidates["cand-02"] = models.SuggestedStory{
+		ID:             "cand-02",
+		Headline:       "Aviation Ministry Mandates Single-Window Customs Clearance for Lagos & Abuja Cargo",
+		Pitch:          "Reduces cargo dwell time from 14 days to 48 hours for perishable and agricultural exports.",
+		Category:       "business-institutions",
+		RelevanceScore: 0.88,
+		Sources: []models.SourceCitation{
+			{
+				SourceName:   "Federal Airports Authority of Nigeria (FAAN)",
+				URL:          "https://faan.gov.ng/cargo-clearance-guidelines",
+				PublishedAt:  "2026-10-15T07:00:00Z",
+				ClaimSummary: "Digital portal integration with Customs and Quarantine services starting Monday.",
+			},
+		},
+		ExtractedFacts: []string{
+			"Single-window system integrates Customs (NCS), Quarantine (NAQS), and FAAN inspection into one physical stop.",
+			"Targeting dwell times under 48 hours for perishable agricultural air exports.",
+		},
+		Status:    "discovered",
+		CreatedAt: time.Now().Add(-5 * time.Hour),
+	}
+
+	m.sources = []models.Source{
+		{
+			ID:               "src-01",
+			Name:             "State House Newsroom",
+			Type:             "rss",
+			FeedURL:          "https://statehouse.gov.ng/feed",
+			SiteURL:          "https://statehouse.gov.ng",
+			CategoryHint:     "nigerian-current-affairs",
+			ReliabilityScore: 0.98,
+			Active:           true,
+			LastFetchedAt:    time.Now().Add(-15 * time.Minute),
+			CreatedAt:        time.Now(),
+		},
+		{
+			ID:               "src-02",
+			Name:             "Central Bank of Nigeria",
+			Type:             "api",
+			FeedURL:          "https://cbn.gov.ng/api/press-releases",
+			SiteURL:          "https://cbn.gov.ng",
+			CategoryHint:     "business-institutions",
+			ReliabilityScore: 0.95,
+			Active:           true,
+			LastFetchedAt:    time.Now().Add(-30 * time.Minute),
+			CreatedAt:        time.Now(),
+		},
+		{
+			ID:               "src-03",
+			Name:             "Punch RSS",
+			Type:             "rss",
+			FeedURL:          "https://punchng.com/feed",
+			SiteURL:          "https://punchng.com",
+			CategoryHint:     "nigerian-current-affairs",
+			ReliabilityScore: 0.85,
+			Active:           true,
+			LastFetchedAt:    time.Now().Add(-10 * time.Minute),
+			CreatedAt:        time.Now(),
+		},
+	}
+
 	return m
 }
 
@@ -255,6 +568,42 @@ func (m *MemoryStore) Save(ctx context.Context, a *models.Article) error {
 	}
 	m.articles[a.Slug] = *a
 	return nil
+}
+
+func (m *MemoryStore) ListCandidates(ctx context.Context) ([]models.SuggestedStory, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	res := make([]models.SuggestedStory, 0, len(m.candidates))
+	for _, c := range m.candidates {
+		res = append(res, c)
+	}
+	return res, nil
+}
+
+func (m *MemoryStore) GetCandidate(ctx context.Context, id string) (*models.SuggestedStory, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	c, ok := m.candidates[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return &c, nil
+}
+
+func (m *MemoryStore) SaveCandidate(ctx context.Context, sStory *models.SuggestedStory) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if sStory.ID == "" {
+		sStory.ID = fmt.Sprintf("cand-%d", time.Now().UnixNano())
+	}
+	m.candidates[sStory.ID] = *sStory
+	return nil
+}
+
+func (m *MemoryStore) ListSources(ctx context.Context) ([]models.Source, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.sources, nil
 }
 
 func (m *MemoryStore) RecordUpload(ctx context.Context, key, name string, size int64, contentType, publicURL string) error {

@@ -60,10 +60,38 @@ type SocialVariants struct {
 	Newsletter string `json:"newsletter,omitempty"`
 }
 
-type SourceLink struct {
-	URL        string `json:"url"`
-	Publisher  string `json:"publisher"`
-	AccessedAt string `json:"accessedAt"`
+type SourceCitation struct {
+	SourceName   string `json:"sourceName"`
+	URL          string `json:"url"`
+	PublishedAt  string `json:"publishedAt,omitempty"`
+	ClaimSummary string `json:"claimSummary,omitempty"`
+}
+
+type Source struct {
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Type             string    `json:"type"`
+	FeedURL          string    `json:"feedUrl"`
+	SiteURL          string    `json:"siteUrl,omitempty"`
+	CategoryHint     string    `json:"categoryHint,omitempty"`
+	ReliabilityScore float64   `json:"reliabilityScore"`
+	Active           bool      `json:"active"`
+	LastFetchedAt    time.Time `json:"lastFetchedAt,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+}
+
+type SuggestedStory struct {
+	ID             string           `json:"id"`
+	Headline       string           `json:"headline"`
+	Pitch          string           `json:"pitch"`
+	Category       string           `json:"category"`
+	RelevanceScore float64          `json:"relevanceScore"`
+	Sources        []SourceCitation `json:"sources"`
+	ExtractedFacts []string         `json:"extractedFacts"`
+	SuggestedDraft []ContentBlock   `json:"suggestedDraft,omitempty"`
+	Status         string           `json:"status"` // 'discovered', 'selected', 'drafted', 'in_review', 'rejected', 'published'
+	ArticleID      string           `json:"articleId,omitempty"`
+	CreatedAt      time.Time        `json:"createdAt"`
 }
 
 type Article struct {
@@ -79,8 +107,10 @@ type Article struct {
 	ReadTime       string           `json:"readTime"`
 	Status         PublishingStatus `json:"status"`
 	Body           []ContentBlock   `json:"body"`
-	SourceLinks    []SourceLink     `json:"sourceLinks"`
+	Sources        []SourceCitation `json:"sources"`
 	SocialVariants SocialVariants   `json:"socialVariants"`
+	CandidateID    string           `json:"candidateId,omitempty"`
+	AIReviewNotes  string           `json:"aiReviewNotes,omitempty"`
 	PublishedAt    time.Time        `json:"publishedAt"`
 	CreatedAt      time.Time        `json:"createdAt"`
 }

@@ -76,6 +76,11 @@ func main() {
 	mux.HandleFunc("POST /api/articles", articleHandler.SaveArticle)
 	mux.HandleFunc("GET /api/links/resolve", articleHandler.ResolveLink)
 
+	// AI discovery candidates and sources routes
+	mux.HandleFunc("GET /api/candidates", articleHandler.ListCandidates)
+	mux.HandleFunc("GET /api/candidates/", articleHandler.GetCandidate)
+	mux.HandleFunc("GET /api/sources", articleHandler.ListSources)
+
 	// Presigned S3 upload routes
 	mux.HandleFunc("POST /api/uploads/presign", uploadHandler.PresignUpload)
 	mux.HandleFunc("POST /api/files/presign-upload", uploadHandler.PresignUpload)

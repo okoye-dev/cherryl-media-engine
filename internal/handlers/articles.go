@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -96,6 +97,50 @@ func (h *ArticleHandler) SaveArticle(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *ArticleHandler) ListCandidates(w http.ResponseWriter, r *http.Request) {
+	candidates, err := h.store.ListCandidates(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"failed to fetch suggested candidates"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(candidates)
+}
+
+func (h *ArticleHandler) GetCandidate(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/candidates/")
+	id = strings.TrimSpace(id)
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	candidate, err := h.store.GetCandidate(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, `{"error":"failed to fetch candidate"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(candidate)
+}
+
+func (h *ArticleHandler) ListSources(w http.ResponseWriter, r *http.Request) {
+	sources, err := h.store.ListSources(r.Context())
+	if err != nil {
+		http.Error(w, `{"error":"failed to fetch sources"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(sources)
+}
+
 func (h *ArticleHandler) ResolveLink(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
 	if targetURL == "" {
@@ -114,4 +159,68 @@ func (h *ArticleHandler) ResolveLink(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+// GenerateAIContext formats a complete editorial bundle for external LLM prompt context
+func FormatAIContext(art *models.Article) string {
+	var sb strings.Builder
+	sb.WriteString("# EDITORIAL CONTEXT & SOURCE BRIEF FOR FACT CHECKING / REFINEMENT\n\n")
+	sb.WriteString(fmt.Sprintf("## TITLE: %s\n", art.Title))
+	if art.Deck != "" {
+		sb.WriteString(fmt.Sprintf("## DECK / SUBTITLE: %s\n", art.Deck))
+	}
+	sb.WriteString(fmt.Sprintf("## CATEGORY: %s\n", art.CategoryName))
+	sb.WriteString(fmt.Sprintf("## ESTIMATED READ TIME: %s\n\n", art.ReadTime))
+
+	sb.WriteString("### PRIMARY SOURCES & CITATIONS:\n")
+	if len(art.Sources) == 0 {
+		sb.WriteString("- No external source links attached yet.\n")
+	} else {
+		for i, s := range art.Sources {
+			sb.WriteString(fmt.Sprintf("%d. **%s** (%s)\n   - Source URL: %s\n", i+1, s.SourceName, s.PublishedAt, s.URL))
+			if s.ClaimSummary != "" {
+				sb.WriteString(fmt.Sprintf("   - Key Claim / Fact: %s\n", s.ClaimSummary))
+			}
+		}
+	}
+	sb.WriteString("\n")
+
+	sb.WriteString("### FULL ARTICLE BODY:\n")
+	for _, block := range art.Body {
+		switch block.Type {
+		case "paragraph":
+			sb.WriteString(block.Text + "\n\n")
+		case "heading":
+			sb.WriteString(fmt.Sprintf("#### %s\n\n", block.Text))
+		case "quote":
+			sb.WriteString(fmt.Sprintf("> \"%s\"\n> — %s (%s)\n\n", block.Quote, block.Author, block.Context))
+		case "link":
+			sb.WriteString(fmt.Sprintf("[Link Card: %s - %s (%s)]\n\n", block.Title, block.URL, block.Publisher))
+		case "image":
+			sb.WriteString(fmt.Sprintf("[Image: %s | Caption: %s]\n\n", block.Src, block.Caption))
+		}
+	}
+
+	sb.WriteString("### SOCIAL MEDIA CHANNEL VARIANTS:\n")
+	if art.SocialVariants.X != "" {
+		sb.WriteString(fmt.Sprintf("- **X / Twitter**: %s\n", art.SocialVariants.X))
+	}
+	if art.SocialVariants.Facebook != "" {
+		sb.WriteString(fmt.Sprintf("- **Facebook**: %s\n", art.SocialVariants.Facebook))
+	}
+	if art.SocialVariants.LinkedIn != "" {
+		sb.WriteString(fmt.Sprintf("- **LinkedIn**: %s\n", art.SocialVariants.LinkedIn))
+	}
+	if art.SocialVariants.Newsletter != "" {
+		sb.WriteString(fmt.Sprintf("- **Newsletter Blurb**: %s\n", art.SocialVariants.Newsletter))
+	}
+
+	sb.WriteString("\n---\n")
+	sb.WriteString("### EDITORIAL INSTRUCTIONS FOR AI:\n")
+	sb.WriteString("1. Verify consistency between cited primary sources and the claims in the article body.\n")
+	sb.WriteString("2. Check for journalistic objectivity and crisp, engaging Nigerian newsroom tone.\n")
+	sb.WriteString("3. Highlight any factual inconsistencies, ungrounded speculation, or spelling of Nigerian names and public entities.\n")
+	sb.WriteString("4. Provide refined body paragraphs or improved social media angles if appropriate.\n")
+
+	return sb.String()
 }
