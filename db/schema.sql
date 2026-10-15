@@ -66,7 +66,38 @@ CREATE INDEX IF NOT EXISTS idx_suggested_stories_status ON suggested_stories(sta
 CREATE INDEX IF NOT EXISTS idx_suggested_stories_category ON suggested_stories(category);
 CREATE INDEX IF NOT EXISTS idx_suggested_stories_relevance ON suggested_stories(relevance_score DESC);
 
--- 6. Canonical publication articles
+-- 3. Newsroom Users & Staff
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'editor', -- 'admin', 'editor', 'reporter'
+    avatar_url TEXT,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+-- 4. Newsroom Auth Sessions
+CREATE TABLE IF NOT EXISTS sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    user_agent TEXT,
+    ip_address TEXT,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+-- 5. Canonical publication articles
 CREATE TABLE IF NOT EXISTS articles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     slug TEXT NOT NULL UNIQUE,
@@ -75,6 +106,7 @@ CREATE TABLE IF NOT EXISTS articles (
     deck TEXT,
     category TEXT NOT NULL,
     cover_image TEXT,
+    author_id UUID REFERENCES users(id) ON DELETE SET NULL,
     author_name TEXT DEFAULT 'Cherryl Staff',
     author_role TEXT DEFAULT 'Editorial Desk',
     blocks JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -83,6 +115,7 @@ CREATE TABLE IF NOT EXISTS articles (
     tags TEXT[] NOT NULL DEFAULT '{}',
     read_time TEXT,
     status TEXT NOT NULL DEFAULT 'draft', -- 'draft', 'in_review', 'approved', 'published'
+    published_by UUID REFERENCES users(id) ON DELETE SET NULL,
     candidate_id UUID REFERENCES suggested_stories(id) ON DELETE SET NULL,
     ai_review_notes TEXT,
     published_at TIMESTAMPTZ,
