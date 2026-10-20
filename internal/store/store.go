@@ -45,6 +45,7 @@ type UserStore interface {
 type UploadStore interface {
 	RecordUpload(ctx context.Context, key, name string, size int64, contentType, publicURL string) error
 	ConfirmUpload(ctx context.Context, key string, size int64, publicURL string) error
+	IsConfirmed(ctx context.Context, storageKey string) (bool, error)
 }
 
 type SettingsStore interface {
@@ -57,6 +58,14 @@ type SectionStore interface {
 	GetSection(ctx context.Context, sectionKey string) (*models.CuratedSection, error)
 	GetAllSections(ctx context.Context) ([]models.CuratedSection, error)
 	SaveSection(ctx context.Context, sectionKey string, articleIDs []string, metadata map[string]any) error
+}
+
+type SubscriberStore interface {
+	ListSubscribers(ctx context.Context, activeOnly bool) ([]models.PostSubscriber, error)
+	AddSubscriber(ctx context.Context, email, name string, categories []string) (*models.PostSubscriber, error)
+	RemoveSubscriber(ctx context.Context, email string) error
+	RecordDispatches(ctx context.Context, articleID string, recipientEmails []string) error
+	ListDispatches(ctx context.Context, articleID string) ([]models.EmailDispatch, error)
 }
 
 type PGStore struct {
@@ -169,8 +178,18 @@ func (s *PGStore) Search(ctx context.Context, query string, limit int) ([]models
 func (s *PGStore) CheckSlugAvailable(ctx context.Context, slug string, excludeID string) (bool, error) {
 	var count int
 	var err error
+	var excludeUUID uuid.UUID
+	var hasValidUUID bool
+
 	if excludeID != "" {
-		err = s.pool.QueryRow(ctx, "SELECT count(*) FROM articles WHERE LOWER(slug) = LOWER($1) AND id != $2::uuid", slug, excludeID).Scan(&count)
+		if parsed, parseErr := uuid.Parse(excludeID); parseErr == nil {
+			excludeUUID = parsed
+			hasValidUUID = true
+		}
+	}
+
+	if hasValidUUID {
+		err = s.pool.QueryRow(ctx, "SELECT count(*) FROM articles WHERE LOWER(slug) = LOWER($1) AND id != $2", slug, excludeUUID).Scan(&count)
 	} else {
 		err = s.pool.QueryRow(ctx, "SELECT count(*) FROM articles WHERE LOWER(slug) = LOWER($1)", slug).Scan(&count)
 	}
@@ -254,13 +273,15 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 			id, slug, title, kicker, deck, category, cover_image, author_name, author_role, 
 			blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, 
 			excerpt, original_url, is_lead, urgent, published_at, created_at, updated_at, tags,
-			subtitle, seo_title, seo_slug, seo_description, send_webpushr, related_stories
+			subtitle, seo_title, seo_slug, seo_description, send_webpushr, related_stories,
+			is_featured, media_confirmed
 		)
 		VALUES (
 			COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, 
 			$10::jsonb, $11::jsonb, $12::jsonb, $13, $14, NULLIF($15, '')::uuid, $16, 
 			$17, $18, $19, $20, $21, $22, NOW(), $23,
-			$24, $25, $26, $27, $28, $29::jsonb
+			$24, $25, $26, $27, $28, $29::jsonb,
+			$30, $31
 		)
 		ON CONFLICT (slug) DO UPDATE
 		SET title = EXCLUDED.title,
@@ -287,9 +308,11 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		    seo_description = EXCLUDED.seo_description,
 		    send_webpushr = EXCLUDED.send_webpushr,
 		    related_stories = EXCLUDED.related_stories,
+		    is_featured = EXCLUDED.is_featured,
+		    media_confirmed = EXCLUDED.media_confirmed,
 		    published_at = EXCLUDED.published_at,
 		    updated_at = NOW()
-	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, string(blocksBytes), string(sourcesBytes), string(socialBytes), a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags, a.Subtitle, a.SEOTitle, a.SEOSlug, a.SEODescription, a.SendWebpushr, string(relatedBytes))
+	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, string(blocksBytes), string(sourcesBytes), string(socialBytes), a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags, a.Subtitle, a.SEOTitle, a.SEOSlug, a.SEODescription, a.SendWebpushr, string(relatedBytes), a.IsFeatured, a.MediaConfirmed)
 
 	if err != nil {
 		return fmt.Errorf("upsert article %q: %w", a.Slug, err)
@@ -464,15 +487,106 @@ func (s *PGStore) RecordUpload(ctx context.Context, key, name string, size int64
 
 func (s *PGStore) ConfirmUpload(ctx context.Context, key string, size int64, publicURL string) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO uploads (storage_key, file_name, size_bytes, content_type, public_url, created_at)
-		VALUES ($1, $1, $2, 'application/octet-stream', $3, NOW())
+		INSERT INTO uploads (storage_key, file_name, size_bytes, content_type, public_url, status, created_at)
+		VALUES ($1, $1, $2, 'application/octet-stream', $3, 'confirmed', NOW())
 		ON CONFLICT (storage_key) DO UPDATE
-		SET size_bytes = $2, public_url = $3
+		SET size_bytes = $2, public_url = $3, status = 'confirmed'
 	`, key, size, publicURL)
 	if err != nil {
 		return fmt.Errorf("confirm upload: %w", err)
 	}
 	return nil
+}
+
+func (s *PGStore) IsConfirmed(ctx context.Context, storageKey string) (bool, error) {
+	if storageKey == "" {
+		return false, nil
+	}
+	var confirmed bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM uploads WHERE storage_key = $1 AND status = 'confirmed')
+	`, storageKey).Scan(&confirmed)
+	return confirmed, err
+}
+
+func (s *PGStore) ListSubscribers(ctx context.Context, activeOnly bool) ([]models.PostSubscriber, error) {
+	query := "SELECT id::text, email, name, categories, active, created_at, updated_at FROM post_subscribers"
+	if activeOnly {
+		query += " WHERE active = true"
+	}
+	query += " ORDER BY created_at DESC"
+
+	rows, err := s.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subs []models.PostSubscriber
+	for rows.Next() {
+		var sub models.PostSubscriber
+		if err := rows.Scan(&sub.ID, &sub.Email, &sub.Name, &sub.Categories, &sub.Active, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+			return nil, err
+		}
+		subs = append(subs, sub)
+	}
+	return subs, nil
+}
+
+func (s *PGStore) AddSubscriber(ctx context.Context, email, name string, categories []string) (*models.PostSubscriber, error) {
+	if categories == nil {
+		categories = []string{}
+	}
+	var sub models.PostSubscriber
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO post_subscribers (email, name, categories, active, created_at, updated_at)
+		VALUES ($1, $2, $3, true, NOW(), NOW())
+		ON CONFLICT (email) DO UPDATE
+		SET name = EXCLUDED.name, categories = EXCLUDED.categories, active = true, updated_at = NOW()
+		RETURNING id::text, email, name, categories, active, created_at, updated_at
+	`, email, name, categories).Scan(&sub.ID, &sub.Email, &sub.Name, &sub.Categories, &sub.Active, &sub.CreatedAt, &sub.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &sub, nil
+}
+
+func (s *PGStore) RemoveSubscriber(ctx context.Context, email string) error {
+	_, err := s.pool.Exec(ctx, "DELETE FROM post_subscribers WHERE email = $1", email)
+	return err
+}
+
+func (s *PGStore) RecordDispatches(ctx context.Context, articleID string, recipientEmails []string) error {
+	for _, email := range recipientEmails {
+		_, _ = s.pool.Exec(ctx, `
+			INSERT INTO post_email_dispatches (article_id, recipient_email, status, created_at)
+			VALUES ($1::uuid, $2, 'pending', NOW())
+		`, articleID, email)
+	}
+	return nil
+}
+
+func (s *PGStore) ListDispatches(ctx context.Context, articleID string) ([]models.EmailDispatch, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, article_id::text, recipient_email, status, COALESCE(error_message, ''), sent_at, created_at
+		FROM post_email_dispatches
+		WHERE article_id = $1::uuid
+		ORDER BY created_at DESC
+	`, articleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var dispatches []models.EmailDispatch
+	for rows.Next() {
+		var d models.EmailDispatch
+		if err := rows.Scan(&d.ID, &d.ArticleID, &d.RecipientEmail, &d.Status, &d.ErrorMessage, &d.SentAt, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		dispatches = append(dispatches, d)
+	}
+	return dispatches, nil
 }
 
 func (s *PGStore) Publish(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error) {
@@ -707,19 +821,23 @@ type MemoryStore struct {
 	uploads    map[string]string
 	users      map[string]*auth.User
 	passwords  map[string]string
-	settings   map[string][]byte
-	sections   map[string]models.CuratedSection
+	settings    map[string][]byte
+	sections    map[string]models.CuratedSection
+	subscribers map[string]models.PostSubscriber
+	dispatches  map[string][]models.EmailDispatch
 }
 
 func NewMemoryStore() *MemoryStore {
 	m := &MemoryStore{
-		articles:   make(map[string]models.Article),
-		candidates: make(map[string]models.SuggestedStory),
-		uploads:    make(map[string]string),
-		users:      make(map[string]*auth.User),
-		passwords:  make(map[string]string),
-		settings:   make(map[string][]byte),
-		sections:   make(map[string]models.CuratedSection),
+		articles:    make(map[string]models.Article),
+		candidates:  make(map[string]models.SuggestedStory),
+		uploads:     make(map[string]string),
+		users:       make(map[string]*auth.User),
+		passwords:   make(map[string]string),
+		settings:    make(map[string][]byte),
+		sections:    make(map[string]models.CuratedSection),
+		subscribers: make(map[string]models.PostSubscriber),
+		dispatches:  make(map[string][]models.EmailDispatch),
 	}
 
 	// Default curated sections
@@ -1246,5 +1364,71 @@ func (m *MemoryStore) SaveSection(ctx context.Context, sectionKey string, articl
 		UpdatedAt:  time.Now(),
 	}
 	return nil
+}
+
+func (m *MemoryStore) IsConfirmed(ctx context.Context, storageKey string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.uploads[storageKey]
+	return ok, nil
+}
+
+func (m *MemoryStore) ListSubscribers(ctx context.Context, activeOnly bool) ([]models.PostSubscriber, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var res []models.PostSubscriber
+	for _, s := range m.subscribers {
+		if !activeOnly || s.Active {
+			res = append(res, s)
+		}
+	}
+	return res, nil
+}
+
+func (m *MemoryStore) AddSubscriber(ctx context.Context, email, name string, categories []string) (*models.PostSubscriber, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if categories == nil {
+		categories = []string{}
+	}
+	sub := models.PostSubscriber{
+		ID:         "sub-" + email,
+		Email:      email,
+		Name:       name,
+		Categories: categories,
+		Active:     true,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	m.subscribers[email] = sub
+	return &sub, nil
+}
+
+func (m *MemoryStore) RemoveSubscriber(ctx context.Context, email string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.subscribers, email)
+	return nil
+}
+
+func (m *MemoryStore) RecordDispatches(ctx context.Context, articleID string, recipientEmails []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, email := range recipientEmails {
+		m.dispatches[articleID] = append(m.dispatches[articleID], models.EmailDispatch{
+			ID:             uuid.New().String(),
+			ArticleID:      articleID,
+			RecipientEmail: email,
+			Status:         "pending",
+			CreatedAt:      time.Now(),
+		})
+	}
+	return nil
+}
+
+func (m *MemoryStore) ListDispatches(ctx context.Context, articleID string) ([]models.EmailDispatch, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.dispatches[articleID], nil
 }
 

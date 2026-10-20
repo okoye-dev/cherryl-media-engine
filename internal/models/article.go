@@ -132,6 +132,8 @@ type Article struct {
 	OriginalURL    string           `json:"originalUrl,omitempty"`
 	IsLead         bool             `json:"isLead,omitempty"`
 	Urgent         bool             `json:"urgent,omitempty"`
+	IsFeatured     bool             `json:"isFeatured,omitempty"`
+	MediaConfirmed bool             `json:"mediaConfirmed,omitempty"`
 	SendWebpushr   bool             `json:"send_webpushr,omitempty"`
 	SEOTitle       string           `json:"seo_title,omitempty"`
 	SEOSlug        string           `json:"seo_slug,omitempty"`

@@ -16,7 +16,67 @@ import (
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 )
 
-const maxFilenameLength = 180
+const (
+	maxFilenameLength  = 180
+	MaxUploadSizeBytes = 100 * 1024 * 1024 // 100 MB max file size for editorial media
+	MaxJsonBytes       = 2 * 1024 * 1024   // 2 MB max for json metadata payloads
+)
+
+var allowedMediaMIMEs = map[string]bool{
+	"image/jpeg":       true,
+	"image/jpg":        true,
+	"image/png":        true,
+	"image/webp":       true,
+	"image/gif":        true,
+	"image/avif":       true,
+	"video/mp4":        true,
+	"video/webm":       true,
+	"video/quicktime":  true,
+	"audio/mpeg":       true,
+	"audio/mp3":        true,
+	"audio/mp4":        true,
+	"audio/m4a":        true,
+	"audio/wav":        true,
+	"audio/x-wav":      true,
+	"audio/ogg":        true,
+	"application/pdf":  true,
+}
+
+var dangerousExtensions = map[string]bool{
+	".exe":   true,
+	".sh":    true,
+	".bash":  true,
+	".bat":   true,
+	".cmd":   true,
+	".php":   true,
+	".phtml": true,
+	".js":    true,
+	".mjs":   true,
+	".html":  true,
+	".htm":   true,
+	".svg":   true, // Disallow raw SVG to prevent Stored XSS via inline scripts
+	".cgi":   true,
+	".pl":    true,
+	".py":    true,
+	".vbs":   true,
+}
+
+func isAllowedMedia(mimeType, filename string) bool {
+	ext := strings.ToLower(path.Ext(filename))
+	if dangerousExtensions[ext] {
+		return false
+	}
+	baseMime := strings.ToLower(strings.TrimSpace(strings.Split(mimeType, ";")[0]))
+	if allowedMediaMIMEs[baseMime] {
+		return true
+	}
+	// Also allow if safe extension matches known safe formats even if MIME was octet-stream
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".mp4", ".webm", ".mov", ".mp3", ".m4a", ".wav", ".ogg", ".pdf":
+		return true
+	}
+	return false
+}
 
 func sanitizeFilename(name string) string {
 	name = strings.ReplaceAll(name, "\\", "/")
@@ -127,14 +187,25 @@ func (h *UploadHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, MaxJsonBytes)
 	var req PresignUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		http.Error(w, "Invalid JSON payload or body too large", http.StatusBadRequest)
 		return
 	}
 
 	if req.Name == "" || req.Size <= 0 {
 		http.Error(w, "name and size (>0) are required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Size > MaxUploadSizeBytes {
+		http.Error(w, fmt.Sprintf("File exceeds maximum allowed size of %d MB", MaxUploadSizeBytes/(1024*1024)), http.StatusBadRequest)
+		return
+	}
+
+	if !isAllowedMedia(req.ContentType, req.Name) {
+		http.Error(w, "Unsupported or disallowed media format. Allowed formats: JPEG, PNG, WebP, GIF, AVIF, MP4, WebM, MP3, PDF.", http.StatusBadRequest)
 		return
 	}
 
@@ -213,14 +284,23 @@ func (h *UploadHandler) DirectUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSizeBytes)
+
 	key := r.URL.Query().Get("key")
 	if key == "" {
 		key = "upload-" + uuid.New().String()
 	}
 
+	baseKey := filepath.Base(key)
+	ext := strings.ToLower(path.Ext(baseKey))
+	if dangerousExtensions[ext] {
+		http.Error(w, "Disallowed file type", http.StatusBadRequest)
+		return
+	}
+
 	uploadDir := "./uploads"
 	_ = os.MkdirAll(uploadDir, 0755)
-	destPath := filepath.Join(uploadDir, filepath.Base(key))
+	destPath := filepath.Join(uploadDir, baseKey)
 
 	out, err := os.Create(destPath)
 	if err != nil {
@@ -231,7 +311,7 @@ func (h *UploadHandler) DirectUpload(w http.ResponseWriter, r *http.Request) {
 
 	_, err = io.Copy(out, r.Body)
 	if err != nil {
-		http.Error(w, "Failed to write file bytes", http.StatusInternalServerError)
+		http.Error(w, "Failed to write file bytes or size limit exceeded", http.StatusInternalServerError)
 		return
 	}
 
@@ -257,6 +337,7 @@ func (h *UploadHandler) ConfirmUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, MaxJsonBytes)
 	var req ConfirmUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.StorageKey == "" {
 		http.Error(w, `{"error":"storage_key is required"}`, http.StatusBadRequest)

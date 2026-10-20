@@ -54,9 +54,10 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 2*1024*1024)
 	var payload map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"invalid JSON body or body exceeds 2MB"}`, http.StatusBadRequest)
 		return
 	}
 

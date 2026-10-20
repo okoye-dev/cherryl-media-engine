@@ -44,9 +44,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"Invalid JSON payload"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"Invalid JSON payload or body too large"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -55,6 +56,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"email and password are required"}`, http.StatusBadRequest)
 		return
 	}
+
+	isSecure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 
 	// 1. Authenticate against Supabase Auth if configured
 	if h.supabase.URL != "" && (h.supabase.PublishableKey != "" || h.supabase.SecretKey != "") {
@@ -66,7 +69,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 				Expires:  time.Now().Add(7 * 24 * time.Hour),
 				HttpOnly: true,
 				SameSite: http.SameSiteLaxMode,
-				Secure:   false,
+				Secure:   isSecure,
 			})
 
 			w.Header().Set("Content-Type", "application/json")
@@ -106,7 +109,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Now().Add(7 * 24 * time.Hour),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   false, // set to true in production with HTTPS
+		Secure:   isSecure,
 	})
 
 	w.Header().Set("Content-Type", "application/json")

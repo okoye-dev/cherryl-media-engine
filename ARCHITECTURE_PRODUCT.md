@@ -152,6 +152,41 @@ All publication output is organized under ten canonical pillars, designed to pro
    - **Masthead & Footer**: Bureau locations (Abuja, Lagos, London), newsroom email, copyright notices.
 3. Clicks **"Save Changes"** -> Settings persist to PostgreSQL, with instant fallback to default canonical values.
 
+### 4.5 The Publish-to-Homepage Pipeline & Media Confirmation Invariant
+Before an article transitions from `draft` to `published`, an automated validation sequence guarantees editorial completeness and media integrity:
+1. **Media Invariant Verification**:
+   - The Go engine scans `featured_image.storage_key` and every `image` and `video` block in the article body for assets with keys in the `media/` namespace.
+   - Every key must have `uploads.status = 'confirmed'` in the database.
+   - If any asset is unconfirmed or still in-flight, `PublishArticle` rejects the request with HTTP 400 (`cannot publish article: media asset "..." is not confirmed uploaded`).
+2. **Draft Persistence & Recovery**:
+   - Writers can click **"Save Draft"** at any time. Drafts are safely stored in PostgreSQL and mirrored in browser local storage.
+   - The newsroom dashboard (`/admin`) features dedicated status tabs (`All`, `Published`, `Drafts`), visual metric badges, and one-click "Resume Draft →" shortcuts.
+3. **Automated Notification Dispatch**:
+   - Upon successful publication, the engine queries active subscribers in `post_subscribers` matching the article's category pillar.
+   - Dispatch jobs are recorded in `post_email_dispatches` for asynchronous email delivery and audit logging.
+
+### 4.6 The Featured Section Decision Engine & Human Curation UI
+The editorial homepage uses an automated decision engine paired with human override capabilities:
+1. **Human Override Priority**:
+   - Desk editors can flag any article as featured via the Article Studio or through the Section Curator (`POST /api/articles/{id}/featured`).
+   - Flagged stories (`is_featured = true`) immediately take precedence as the homepage lead.
+2. **Automated Decision Engine Fallback**:
+   - If no story is manually pinned, the engine evaluates candidates using a 4-tier heuristic:
+     1. Most recent published story with `is_lead = true`.
+     2. Highest editorial completeness: most recent published story having both a 16:9 cover photograph and an editorial deck/subtitle.
+     3. Most recently published article overall.
+3. **Curator Gist Search**:
+   - In `/admin/sections`, editors searching for stories can filter by pillar section and sort by recency or relevance.
+   - Results show full editorial "gists": 16:9 thumbnail, headline, subtitle/deck, kicker, author, publication date, status badge, and a one-click "★ Set as Featured" toggle.
+
+### 4.7 Data-Backed Homepage Scroll Flow (Top 4 Pillars)
+To preserve magazine elegance and prevent vertical visual fatigue, the homepage scroll does not render all 10 pillars consecutively. The scroll hierarchy is informed by analysis of the 28,000+ legacy post archive:
+- **State Affairs & Environs**: 10,033 posts (~36% of all content) — Section 1 in homepage scroll.
+- **Newsbeat**: 9,946 posts (~35% of all content) — Section 2 in homepage scroll.
+- **Brands & SMEs**: 2,063 posts (~7.5% of all content) — Section 3 in homepage scroll.
+- **Opinions**: 2,027 posts (~7.5% of all content) — Section 4 in homepage scroll.
+Together, these four pillars account for over 86% of the publication's content. The remaining six pillars (`Sports`, `Entertainment & Lifestyle`, `Education`, `Thrills & Tricks`, `Youth Corner`, `Tour & Hotels`) are accessible via the top navigation, mobile drawer, and dedicated category hub pages.
+
 ---
 
 ## 5. Data Architecture & Hybrid Storage Model
@@ -199,6 +234,36 @@ type ContentBlock =
 
 - **Token Storage**: JWT tokens are stored in the client's `localStorage` and automatically injected as `Authorization: Bearer <token>` on all API requests via `ApiClient`.
 - **401 Interception**: The frontend service container detects unauthorized responses and automatically clears session state to redirect to `/admin/login`.
+
+### 6.1 Security Threat Model & Defense-in-Depth Hardening
+
+Following a comprehensive code security audit, the platform implements multi-layer defense mechanisms:
+
+1. **Anti-DoS Request Bounds**:
+   - Every mutating HTTP endpoint wraps `r.Body` in `http.MaxBytesReader` to strictly bound payload size (Articles: 10MB, Media Uploads: 100MB, JSON Settings/Batches: 2–5MB, Auth & Subscribers: 64KB).
+   - The Go HTTP server configures explicit connection timeouts (`ReadTimeout: 15s`, `ReadHeaderTimeout: 10s`, `WriteTimeout: 30s`, `IdleTimeout: 60s`) neutralizing Slowloris and connection starvation attacks.
+
+2. **Media Upload & Execution Isolation**:
+   - Strict MIME and file extension validation enforces safe editorial formats (`JPEG`, `PNG`, `WebP`, `GIF`, `AVIF`, `MP4`, `WebM`, `MP3`, `PDF`).
+   - Dangerous executable formats (`.exe`, `.sh`, `.php`, `.js`, `.html`, `.svg`) are blocked. Raw SVG upload is explicitly barred to eliminate Stored XSS vectors via inline SVG script tags.
+   - S3 presigned URLs offload asset uploads directly to Cloudflare R2, bypassing backend CPU and memory.
+
+3. **HTTP Security Response Headers**:
+   - `X-Content-Type-Options: nosniff` prevents MIME type sniffing and confusion exploits.
+   - `X-Frame-Options: SAMEORIGIN` blocks UI clickjacking inside hostile iframes.
+   - `Referrer-Policy: strict-origin-when-cross-origin` protects sensitive referral parameters.
+   - `Permissions-Policy: camera=(), microphone=(), geolocation=()` disables unnecessary browser capabilities.
+
+4. **Dynamic Origin CORS**:
+   - Replaced wildcard CORS with dynamic origin validation allowing trusted domains (`localhost`, `*.cherrylmedia.com`, `*.vercel.app`) with `Vary: Origin` and `Access-Control-Allow-Credentials: true`.
+
+5. **SQL Injection & Invariant Safety**:
+   - 100% of database queries use PostgreSQL parameterized placeholders (`$1`, `$2`, etc.) via `pgxpool`.
+   - Slug uniqueness checks validate UUID structure (`uuid.Parse`) before attempting UUID casting in PostgreSQL queries.
+
+6. **Client-Side XSS Protection**:
+   - Article body content is rendered through React JSX component structures (`ArticleBody.tsx`), guaranteeing automatic string escaping for all text, headings, captions, and quotes.
+   - YouTube embeds validate strict 11-character alphanumeric IDs and render only via `https://www.youtube-nocookie.com/embed/...`.
 
 ---
 

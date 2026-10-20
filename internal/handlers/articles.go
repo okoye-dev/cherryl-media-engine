@@ -43,6 +43,74 @@ func (h *ArticleHandler) NormalizeMediaKeys(art *models.Article) {
 	}
 }
 
+func (h *ArticleHandler) GetFeatured(w http.ResponseWriter, r *http.Request) {
+	featured, err := h.service.GetFeatured(r.Context())
+	if errors.Is(err, store.ErrNotFound) {
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "No featured article found")
+		return
+	}
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, featured)
+}
+
+func (h *ArticleHandler) SetFeatured(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodPut {
+		httputil.WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Method not allowed")
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/articles/")
+	id = strings.TrimSuffix(id, "/featured")
+	id = strings.TrimSpace(id)
+	if id == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_PARAM", "Article ID or slug is required")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body struct {
+		IsFeatured bool `json:"isFeatured"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	art, err := h.service.SetFeatured(r.Context(), id, body.IsFeatured)
+	if errors.Is(err, store.ErrNotFound) {
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Article not found")
+		return
+	}
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "UPDATE_FAILED", err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"article": art,
+	})
+}
+
+func (h *ArticleHandler) SearchCurated(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	category := q.Get("category")
+	query := q.Get("q")
+	sort := q.Get("sort")
+	limit, _ := strconv.Atoi(q.Get("limit"))
+
+	results, err := h.service.SearchCuratedArticles(r.Context(), category, query, sort, limit)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "SEARCH_FAILED", err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"articles": results,
+		"count":    len(results),
+	})
+}
+
 func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	query := r.URL.Query().Get("q")
@@ -120,9 +188,10 @@ func (h *ArticleHandler) GetArticle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ArticleHandler) SaveArticle(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
 	var art models.Article
 	if err := json.NewDecoder(r.Body).Decode(&art); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid JSON request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid JSON request body or payload exceeds 10MB")
 		return
 	}
 

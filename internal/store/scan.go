@@ -16,7 +16,8 @@ const ArticleSelectFields = `
 	blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, 
 	excerpt, original_url, is_lead, urgent, published_at, created_at, tags,
 	COALESCE(subtitle, ''), COALESCE(seo_title, ''), COALESCE(seo_slug, ''), 
-	COALESCE(seo_description, ''), COALESCE(send_webpushr, false), COALESCE(related_stories, '[]'::jsonb)
+	COALESCE(seo_description, ''), COALESCE(send_webpushr, false), COALESCE(related_stories, '[]'::jsonb),
+	COALESCE(is_featured, false), COALESCE(media_confirmed, false)
 `
 
 // RowScanner abstracts single-row scanning across pgx.Row and pgx.Rows.
@@ -34,7 +35,7 @@ func scanArticle(scanner RowScanner) (*models.Article, error) {
 		publishedAt, createdAt *time.Time
 		tags []string
 		subtitle, seoTitle, seoSlug, seoDescription string
-		sendWebpushr bool
+		sendWebpushr, isFeatured, mediaConfirmed bool
 		relatedJSON []byte
 	)
 
@@ -43,6 +44,7 @@ func scanArticle(scanner RowScanner) (*models.Article, error) {
 		&blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes,
 		&excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags,
 		&subtitle, &seoTitle, &seoSlug, &seoDescription, &sendWebpushr, &relatedJSON,
+		&isFeatured, &mediaConfirmed,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -66,6 +68,8 @@ func scanArticle(scanner RowScanner) (*models.Article, error) {
 		SEOSlug:        seoSlug,
 		SEODescription: seoDescription,
 		SendWebpushr:   sendWebpushr,
+		IsFeatured:     isFeatured,
+		MediaConfirmed: mediaConfirmed,
 	}
 
 	if kicker != nil {

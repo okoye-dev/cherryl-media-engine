@@ -4,7 +4,10 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/auth"
 	"github.com/okoye-dev/cherryl-media-engine/internal/config"
@@ -16,15 +19,49 @@ import (
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 )
 
-func withCORS(next http.Handler) http.Handler {
+func isAllowedOrigin(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	hostname := strings.ToLower(u.Hostname())
+	return hostname == "localhost" ||
+		hostname == "127.0.0.1" ||
+		strings.HasSuffix(hostname, ".local") ||
+		strings.HasSuffix(hostname, "cherrylmedia.com") ||
+		strings.HasSuffix(hostname, "vercel.app")
+}
+
+func securityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		// 1. Security Response Headers
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+
+		// 2. Strict CORS with origin verification
+		origin := r.Header.Get("Origin")
+		if origin != "" && isAllowedOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Range")
+
+		// 3. Preflight fast response
 		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -44,6 +81,7 @@ func main() {
 	var userStore store.UserStore
 	var settingsStore store.SettingsStore
 	var sectionStore store.SectionStore
+	var subscriberStore store.SubscriberStore
 
 	if cfg.Database.URL != "" {
 		ctx := context.Background()
@@ -68,6 +106,7 @@ func main() {
 		userStore = pg
 		settingsStore = pg
 		sectionStore = pg
+		subscriberStore = pg
 
 		// Seed PostgreSQL with canonical articles and default admin if not already present
 		if err := seed.Run(ctx, pg); err != nil {
@@ -80,6 +119,7 @@ func main() {
 		userStore = mem
 		settingsStore = mem
 		sectionStore = mem
+		subscriberStore = mem
 
 		// Seed Memory store
 		if err := seed.Run(context.Background(), mem); err != nil {
@@ -116,6 +156,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret, cfg.Supabase)
 	settingsHandler := handlers.NewSettingsHandlerWithService(settingsService)
 	sectionsHandler := handlers.NewSectionsHandlerWithService(sectionService)
+	subscriberHandler := handlers.NewSubscriberHandler(subscriberStore)
 
 	// Authentication routes
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
@@ -125,12 +166,22 @@ func main() {
 	// Article routes
 	mux.HandleFunc("GET /api/articles/check-slug", articleHandler.CheckSlug)
 	mux.HandleFunc("GET /api/tags", articleHandler.ListTags)
+	mux.HandleFunc("GET /api/articles/featured", articleHandler.GetFeatured)
+	mux.HandleFunc("POST /api/articles/{id}/featured", articleHandler.SetFeatured)
+	mux.HandleFunc("PUT /api/articles/{id}/featured", articleHandler.SetFeatured)
+	mux.HandleFunc("GET /api/curation/search", articleHandler.SearchCurated)
 	mux.HandleFunc("GET /api/articles", articleHandler.ListArticles)
 	mux.HandleFunc("GET /api/articles/", articleHandler.GetArticle)
 	mux.HandleFunc("POST /api/articles", articleHandler.SaveArticle)
 	mux.HandleFunc("POST /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("PUT /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("GET /api/links/resolve", articleHandler.ResolveLink)
+
+	// Notification subscribers routes
+	mux.HandleFunc("GET /api/subscribers", subscriberHandler.ListSubscribers)
+	mux.HandleFunc("POST /api/subscribers", subscriberHandler.AddSubscriber)
+	mux.HandleFunc("DELETE /api/subscribers", subscriberHandler.RemoveSubscriber)
+	mux.HandleFunc("GET /api/subscribers/dispatches", subscriberHandler.ListDispatches)
 
 	// Curated layout sections routes
 	mux.HandleFunc("GET /api/sections", sectionsHandler.GetSections)
@@ -173,8 +224,12 @@ func main() {
 	})
 
 	server := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: withCORS(mux),
+		Addr:              ":" + cfg.Port,
+		Handler:           securityMiddleware(mux),
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	log.Printf("Cherryl Media Engine running on http://localhost:%s\n", cfg.Port)

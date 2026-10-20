@@ -67,9 +67,10 @@ func (h *SectionsHandler) GetSectionByKey(w http.ResponseWriter, r *http.Request
 // UpdateSections handles POST /api/sections and PUT /api/sections
 // Supports single section update or batch { sections: [...] }
 func (h *SectionsHandler) UpdateSections(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 5*1024*1024)
 	var bodyRaw json.RawMessage
 	if err := json.NewDecoder(r.Body).Decode(&bodyRaw); err != nil {
-		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"invalid JSON body or body exceeds 5MB"}`, http.StatusBadRequest)
 		return
 	}
 
