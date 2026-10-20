@@ -11,6 +11,7 @@ import (
 	"github.com/okoye-dev/cherryl-media-engine/internal/handlers"
 	"github.com/okoye-dev/cherryl-media-engine/internal/migrate"
 	"github.com/okoye-dev/cherryl-media-engine/internal/seed"
+	"github.com/okoye-dev/cherryl-media-engine/internal/services"
 	"github.com/okoye-dev/cherryl-media-engine/internal/storage"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 )
@@ -103,12 +104,18 @@ func main() {
 		}()
 	}
 
+	// Domain & Application Services layer (Dependency Injection)
+	mediaResolver := services.NewMediaResolver(s3Storage)
+	articleService := services.NewArticleService(articleStore, mediaResolver)
+	sectionService := services.NewSectionService(sectionStore, articleStore, mediaResolver)
+	settingsService := services.NewSettingsService(settingsStore)
+
 	mux := http.NewServeMux()
-	articleHandler := handlers.NewArticleHandler(articleStore, s3Storage)
+	articleHandler := handlers.NewArticleHandlerWithService(articleService)
 	uploadHandler := handlers.NewUploadHandler(s3Storage, uploadStore)
 	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret, cfg.Supabase)
-	settingsHandler := handlers.NewSettingsHandler(settingsStore)
-	sectionsHandler := handlers.NewSectionsHandler(sectionStore, articleStore, s3Storage)
+	settingsHandler := handlers.NewSettingsHandlerWithService(settingsService)
+	sectionsHandler := handlers.NewSectionsHandlerWithService(sectionService)
 
 	// Authentication routes
 	mux.HandleFunc("POST /api/auth/login", authHandler.Login)

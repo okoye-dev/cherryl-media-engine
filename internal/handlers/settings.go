@@ -5,62 +5,34 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/okoye-dev/cherryl-media-engine/internal/services"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 )
 
 type SettingsHandler struct {
-	store store.SettingsStore
+	service services.SettingsService
 }
 
 func NewSettingsHandler(s store.SettingsStore) *SettingsHandler {
-	return &SettingsHandler{store: s}
+	return &SettingsHandler{service: services.NewSettingsService(s)}
+}
+
+func NewSettingsHandlerWithService(svc services.SettingsService) *SettingsHandler {
+	return &SettingsHandler{service: svc}
 }
 
 // DefaultEditorialCopy returns fallback copy matching website defaults
 func DefaultEditorialCopy() map[string]any {
-	return map[string]any{
-		"hero": map[string]any{
-			"editionBadge": "DAILY EDITION",
-			"titleLead":    "Independent ",
-			"titleAccent":  "journalism",
-			"titleTrail":   " & digital media network.",
-			"description":  "Leading digital newsroom and new-age media distribution network covering Nigerian state affairs, business, culture, politics, and dispatches across Africa.",
-		},
-		"ticker": map[string]any{
-			"label":        "LIVE WIRE",
-			"customNotice": "BREAKING: Federal Executive Council ratifies state electricity market guidelines and sovereign payment assurance frameworks.",
-		},
-		"dossier": map[string]any{
-			"issueBadge":  "WEEKEND EDITION · ISSUE #18",
-			"heading":     "Culture, Cinema & In-Depth Features",
-			"subheading":  "Features, music chronicles, food heritage, and modern Nigerian narratives.",
-		},
-		"network": map[string]any{
-			"headline":     "Multi-Channel Media Distribution Network",
-			"subheadline":  "Reach over 250,000+ readers and professionals daily across West Africa and the diaspora through verified news channels.",
-			"subscribers":  "250,000+",
-			"reachMonthly": "1.8M+",
-		},
-		"footer": map[string]any{
-			"tagline":         "New-Age Media Distribution & Independent Journalism",
-			"locations":       "Abuja · Lagos · London",
-			"contactEmail":    "newsroom@cherrylmedia.com",
-			"copyrightNotice": "© 2026 Cherryl Media Enterprise. All rights reserved.",
-		},
-	}
+	svc := services.NewSettingsService(nil)
+	return svc.DefaultEditorialCopy()
 }
 
 func (h *SettingsHandler) writeSettingsResponse(w http.ResponseWriter, r *http.Request) {
-	settings, err := h.store.GetAllSettings(r.Context())
-	if err != nil || len(settings) == 0 {
+	settings, err := h.service.GetAllSettings(r.Context())
+	if err != nil {
 		settings = map[string]any{
 			"editorial_copy": DefaultEditorialCopy(),
 		}
-	}
-
-	// Ensure editorial_copy key exists
-	if _, ok := settings["editorial_copy"]; !ok {
-		settings["editorial_copy"] = DefaultEditorialCopy()
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -88,23 +60,23 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	ctx := r.Context()
+
 	// If the payload has "key" and "value", store that specific key
 	if k, ok := payload["key"].(string); ok && k != "" {
 		valBytes, _ := json.Marshal(payload["value"])
-		_ = h.store.SetSetting(r.Context(), k, valBytes)
-	} else if edCopy, ok := payload["editorial_copy"]; ok {
-		valBytes, _ := json.Marshal(edCopy)
-		_ = h.store.SetSetting(r.Context(), "editorial_copy", valBytes)
+		_ = h.service.SetSetting(ctx, k, valBytes)
+	} else if edCopy, ok := payload["editorial_copy"].(map[string]any); ok {
+		_ = h.service.UpdateEditorialCopy(ctx, edCopy)
 	} else {
 		// Treat entire payload as editorial_copy if it contains hero/ticker keys
 		if _, hasHero := payload["hero"]; hasHero {
-			valBytes, _ := json.Marshal(payload)
-			_ = h.store.SetSetting(r.Context(), "editorial_copy", valBytes)
+			_ = h.service.UpdateEditorialCopy(ctx, payload)
 		} else {
 			for k, v := range payload {
 				if strings.TrimSpace(k) != "" {
 					valBytes, _ := json.Marshal(v)
-					_ = h.store.SetSetting(r.Context(), k, valBytes)
+					_ = h.service.SetSetting(ctx, k, valBytes)
 				}
 			}
 		}

@@ -7,71 +7,39 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/httputil"
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
+	"github.com/okoye-dev/cherryl-media-engine/internal/services"
 	"github.com/okoye-dev/cherryl-media-engine/internal/storage"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
-	"github.com/okoye-dev/cherryl-media-engine/internal/urlutil"
 )
 
 type ArticleHandler struct {
-	store   store.ArticleStore
-	storage storage.Storage
+	service services.ArticleService
 }
 
+// NewArticleHandler constructs an ArticleHandler from store and storage for backwards compatibility.
 func NewArticleHandler(s store.ArticleStore, st storage.Storage) *ArticleHandler {
-	return &ArticleHandler{
-		store:   s,
-		storage: st,
-	}
+	resolver := services.NewMediaResolver(st)
+	svc := services.NewArticleService(s, resolver)
+	return &ArticleHandler{service: svc}
 }
 
-// ResolveMedia dynamically builds public URLs using the active storage configuration
-// so the database only needs to store the location-independent storage key.
+// NewArticleHandlerWithService constructs an ArticleHandler with an injected ArticleService.
+func NewArticleHandlerWithService(svc services.ArticleService) *ArticleHandler {
+	return &ArticleHandler{service: svc}
+}
+
 func (h *ArticleHandler) ResolveMedia(art *models.Article) {
-	if art == nil || h.storage == nil {
-		return
-	}
-
-	if art.FeaturedImage.StorageKey != "" {
-		art.FeaturedImage.URL = h.storage.GetPublicURL(art.FeaturedImage.StorageKey)
-	} else if key := urlutil.ExtractStorageKey(art.FeaturedImage.URL); strings.HasPrefix(key, "media/") {
-		art.FeaturedImage.StorageKey = key
-		art.FeaturedImage.URL = h.storage.GetPublicURL(key)
-	}
-
-	for i := range art.Body {
-		block := &art.Body[i]
-		if block.Type == "image" || block.Type == "video" {
-			if block.StorageKey != "" {
-				block.Src = h.storage.GetPublicURL(block.StorageKey)
-			} else if key := urlutil.ExtractStorageKey(block.Src); strings.HasPrefix(key, "media/") {
-				block.StorageKey = key
-				block.Src = h.storage.GetPublicURL(key)
-			}
-		}
+	if h.service != nil && h.service.MediaResolver() != nil {
+		h.service.MediaResolver().ResolveMedia(art)
 	}
 }
 
-// NormalizeMediaKeys ensures storage keys are extracted from URLs so that
-// articles remain decoupled from the physical CDN/host location.
 func (h *ArticleHandler) NormalizeMediaKeys(art *models.Article) {
-	if art.FeaturedImage.StorageKey == "" && art.FeaturedImage.URL != "" {
-		key := urlutil.ExtractStorageKey(art.FeaturedImage.URL)
-		if strings.HasPrefix(key, "media/") {
-			art.FeaturedImage.StorageKey = key
-		}
-	}
-	for i := range art.Body {
-		block := &art.Body[i]
-		if (block.Type == "image" || block.Type == "video") && block.StorageKey == "" && block.Src != "" {
-			key := urlutil.ExtractStorageKey(block.Src)
-			if strings.HasPrefix(key, "media/") {
-				block.StorageKey = key
-			}
-		}
+	if h.service != nil && h.service.MediaResolver() != nil {
+		h.service.MediaResolver().NormalizeMediaKeys(art)
 	}
 }
 
@@ -82,38 +50,17 @@ func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 		query = r.URL.Query().Get("search")
 	}
 	idsParam := r.URL.Query().Get("ids")
-
-	var articles []models.Article
-	var err error
-
-	if idsParam != "" {
-		var rawIDs []string
-		for _, id := range strings.Split(idsParam, ",") {
-			trimmed := strings.TrimSpace(id)
-			if trimmed != "" {
-				rawIDs = append(rawIDs, trimmed)
-			}
+	limit := 20
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, lErr := strconv.Atoi(lStr); lErr == nil && l > 0 {
+			limit = l
 		}
-		articles, err = h.store.GetByIDs(r.Context(), rawIDs)
-	} else if query != "" {
-		limit := 20
-		if lStr := r.URL.Query().Get("limit"); lStr != "" {
-			if l, lErr := strconv.Atoi(lStr); lErr == nil && l > 0 {
-				limit = l
-			}
-		}
-		articles, err = h.store.Search(r.Context(), query, limit)
-	} else {
-		articles, err = h.store.List(r.Context(), status)
 	}
 
+	articles, err := h.service.ListArticles(r.Context(), status, query, idsParam, limit)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch articles")
 		return
-	}
-
-	for i := range articles {
-		h.ResolveMedia(&articles[i])
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, articles)
@@ -134,7 +81,7 @@ func (h *ArticleHandler) PublishArticle(w http.ResponseWriter, r *http.Request) 
 	}
 
 	publishedBy := "editor"
-	art, err := h.store.Publish(r.Context(), id, publishedBy)
+	art, err := h.service.PublishArticle(r.Context(), id, publishedBy)
 	if errors.Is(err, store.ErrNotFound) {
 		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Article not found")
 		return
@@ -144,7 +91,6 @@ func (h *ArticleHandler) PublishArticle(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.ResolveMedia(art)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"article": art,
@@ -160,11 +106,7 @@ func (h *ArticleHandler) GetArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	art, err := h.store.GetBySlug(r.Context(), slug)
-	if errors.Is(err, store.ErrNotFound) {
-		// Fallback to lookup by ID
-		art, err = h.store.GetByID(r.Context(), slug)
-	}
+	art, err := h.service.GetArticle(r.Context(), slug)
 	if errors.Is(err, store.ErrNotFound) {
 		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Article not found")
 		return
@@ -174,7 +116,6 @@ func (h *ArticleHandler) GetArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.ResolveMedia(art)
 	httputil.WriteJSON(w, http.StatusOK, art)
 }
 
@@ -185,42 +126,24 @@ func (h *ArticleHandler) SaveArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if art.Title == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "VALIDATION_FAILED", "Post title cannot be empty")
-		return
-	}
-
-	if art.Slug == "" {
-		art.Slug = strings.ToLower(strings.ReplaceAll(art.Title, " ", "-"))
-	}
-
-	if art.ID == "" {
-		art.ID = "art-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
-	}
-
-	if art.CreatedAt.IsZero() {
-		art.CreatedAt = time.Now()
-	}
-	if art.PublishedAt.IsZero() {
-		art.PublishedAt = time.Now()
-	}
-
-	h.NormalizeMediaKeys(&art)
-
-	if err := h.store.Save(r.Context(), &art); err != nil {
+	saved, err := h.service.SaveArticle(r.Context(), &art)
+	if err != nil {
+		if strings.Contains(err.Error(), "cannot be empty") {
+			httputil.WriteError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
+			return
+		}
 		httputil.WriteError(w, http.StatusInternalServerError, "SAVE_FAILED", "Failed to save article: "+err.Error())
 		return
 	}
 
-	h.ResolveMedia(&art)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
-		"article": art,
+		"article": saved,
 	})
 }
 
 func (h *ArticleHandler) ListCandidates(w http.ResponseWriter, r *http.Request) {
-	candidates, err := h.store.ListCandidates(r.Context())
+	candidates, err := h.service.ListCandidates(r.Context())
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch candidates")
 		return
@@ -236,7 +159,7 @@ func (h *ArticleHandler) GetCandidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	candidate, err := h.store.GetCandidate(r.Context(), id)
+	candidate, err := h.service.GetCandidate(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
 		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Candidate not found")
 		return
@@ -250,7 +173,7 @@ func (h *ArticleHandler) GetCandidate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ArticleHandler) ListSources(w http.ResponseWriter, r *http.Request) {
-	sources, err := h.store.ListSources(r.Context())
+	sources, err := h.service.ListSources(r.Context())
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch sources")
 		return
@@ -265,15 +188,7 @@ func (h *ArticleHandler) ResolveLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isInternal := urlutil.IsInternalURL(targetURL)
-	slug := urlutil.CleanArticleSlug(targetURL)
-
-	response := map[string]any{
-		"url":        targetURL,
-		"isInternal": isInternal,
-		"slug":       slug,
-	}
-
+	response := h.service.ResolveLink(targetURL)
 	httputil.WriteJSON(w, http.StatusOK, response)
 }
 
@@ -284,7 +199,7 @@ func (h *ArticleHandler) CheckSlug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	excludeID := strings.TrimSpace(r.URL.Query().Get("excludeId"))
-	available, err := h.store.CheckSlugAvailable(r.Context(), slug, excludeID)
+	available, err := h.service.CheckSlug(r.Context(), slug, excludeID)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "CHECK_FAILED", "Failed to check slug availability: "+err.Error())
 		return
@@ -298,9 +213,9 @@ func (h *ArticleHandler) CheckSlug(w http.ResponseWriter, r *http.Request) {
 
 func (h *ArticleHandler) ListTags(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	tags, err := h.store.ListTags(r.Context(), q)
+	tags, err := h.service.ListTags(r.Context(), q)
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to list tags: "+err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch tags: "+err.Error())
 		return
 	}
 
@@ -309,7 +224,7 @@ func (h *ArticleHandler) ListTags(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GenerateAIContext formats a complete editorial bundle for external LLM prompt context
+// FormatAIContext renders a structured text digest of an article and its sources for AI ingestion.
 func FormatAIContext(art *models.Article) string {
 	var sb strings.Builder
 	sb.WriteString("# EDITORIAL CONTEXT & SOURCE BRIEF FOR FACT CHECKING / REFINEMENT\n\n")
@@ -346,29 +261,10 @@ func FormatAIContext(art *models.Article) string {
 			sb.WriteString(fmt.Sprintf("[Link Card: %s - %s (%s)]\n\n", block.Title, block.URL, block.Publisher))
 		case "image":
 			sb.WriteString(fmt.Sprintf("[Image: %s | Caption: %s]\n\n", block.Src, block.Caption))
+		case "video":
+			sb.WriteString(fmt.Sprintf("[Video: %s]\n\n", block.Src))
 		}
 	}
-
-	sb.WriteString("### SOCIAL MEDIA CHANNEL VARIANTS:\n")
-	if art.SocialVariants.X != "" {
-		sb.WriteString(fmt.Sprintf("- **X / Twitter**: %s\n", art.SocialVariants.X))
-	}
-	if art.SocialVariants.Facebook != "" {
-		sb.WriteString(fmt.Sprintf("- **Facebook**: %s\n", art.SocialVariants.Facebook))
-	}
-	if art.SocialVariants.LinkedIn != "" {
-		sb.WriteString(fmt.Sprintf("- **LinkedIn**: %s\n", art.SocialVariants.LinkedIn))
-	}
-	if art.SocialVariants.Newsletter != "" {
-		sb.WriteString(fmt.Sprintf("- **Newsletter Blurb**: %s\n", art.SocialVariants.Newsletter))
-	}
-
-	sb.WriteString("\n---\n")
-	sb.WriteString("### EDITORIAL INSTRUCTIONS FOR AI:\n")
-	sb.WriteString("1. Verify consistency between cited primary sources and the claims in the article body.\n")
-	sb.WriteString("2. Check for journalistic objectivity and crisp, engaging Nigerian newsroom tone.\n")
-	sb.WriteString("3. Highlight any factual inconsistencies, ungrounded speculation, or spelling of Nigerian names and public entities.\n")
-	sb.WriteString("4. Provide refined body paragraphs or improved social media angles if appropriate.\n")
 
 	return sb.String()
 }
