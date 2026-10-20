@@ -290,6 +290,40 @@ func (h *ArticleHandler) ResolveLink(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+func (h *ArticleHandler) CheckSlug(w http.ResponseWriter, r *http.Request) {
+	slug := strings.TrimSpace(r.URL.Query().Get("slug"))
+	if slug == "" {
+		http.Error(w, `{"error":"slug parameter is required"}`, http.StatusBadRequest)
+		return
+	}
+	excludeID := strings.TrimSpace(r.URL.Query().Get("excludeId"))
+	available, err := h.store.CheckSlugAvailable(r.Context(), slug, excludeID)
+	if err != nil {
+		http.Error(w, `{"error":"failed to check slug: `+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"slug":      slug,
+		"available": available,
+	})
+}
+
+func (h *ArticleHandler) ListTags(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	tags, err := h.store.ListTags(r.Context(), q)
+	if err != nil {
+		http.Error(w, `{"error":"failed to list tags: `+err.Error()+`"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"tags": tags,
+	})
+}
+
 // GenerateAIContext formats a complete editorial bundle for external LLM prompt context
 func FormatAIContext(art *models.Article) string {
 	var sb strings.Builder

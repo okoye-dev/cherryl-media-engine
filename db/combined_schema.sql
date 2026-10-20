@@ -14,13 +14,32 @@ CREATE TABLE IF NOT EXISTS articles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     slug TEXT NOT NULL UNIQUE,
     title TEXT NOT NULL,
+    subtitle TEXT,
+    kicker TEXT,
     deck TEXT,
+    excerpt TEXT,
     category TEXT NOT NULL,
     cover_image TEXT,
     blocks JSONB NOT NULL DEFAULT '[]'::jsonb,
+    sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+    related_stories JSONB NOT NULL DEFAULT '[]'::jsonb,
+    social_variants JSONB NOT NULL DEFAULT '{}'::jsonb,
+    tags TEXT[] NOT NULL DEFAULT '{}',
+    seo_title TEXT,
+    seo_slug TEXT,
+    seo_description TEXT,
+    send_webpushr BOOLEAN DEFAULT FALSE,
     read_time TEXT,
     status TEXT NOT NULL DEFAULT 'draft',
-    tags TEXT[] NOT NULL DEFAULT '{}',
+    author_name TEXT DEFAULT 'Cherryl Staff',
+    author_role TEXT DEFAULT 'Editorial Desk',
+    author_id UUID,
+    published_by UUID,
+    candidate_id UUID,
+    ai_review_notes TEXT,
+    original_url TEXT,
+    is_lead BOOLEAN DEFAULT FALSE,
+    urgent BOOLEAN DEFAULT FALSE,
     published_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -30,6 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_articles_slug ON articles(slug);
 CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category);
 CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_articles_tags ON articles USING GIN(tags);
 
 CREATE TABLE IF NOT EXISTS uploads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

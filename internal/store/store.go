@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,8 @@ type ArticleStore interface {
 	Search(ctx context.Context, query string, limit int) ([]models.Article, error)
 	Save(ctx context.Context, a *models.Article) error
 	Publish(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error)
+	CheckSlugAvailable(ctx context.Context, slug string, excludeID string) (bool, error)
+	ListTags(ctx context.Context, query string) ([]string, error)
 	ListCandidates(ctx context.Context) ([]models.SuggestedStory, error)
 	GetCandidate(ctx context.Context, id string) (*models.SuggestedStory, error)
 	SaveCandidate(ctx context.Context, s *models.SuggestedStory) error
@@ -64,6 +67,14 @@ func NewPGStore(pool *pgxpool.Pool) *PGStore {
 	return &PGStore{pool: pool}
 }
 
+const articleSelectFields = `
+	id, slug, title, kicker, deck, category, cover_image, author_name, author_role, 
+	blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, 
+	excerpt, original_url, is_lead, urgent, published_at, created_at, tags,
+	COALESCE(subtitle, ''), COALESCE(seo_title, ''), COALESCE(seo_slug, ''), 
+	COALESCE(seo_description, ''), COALESCE(send_webpushr, false), COALESCE(related_stories, '[]'::jsonb)
+`
+
 func scanArticleRows(rows pgx.Rows) ([]models.Article, error) {
 	var articles []models.Article
 	for rows.Next() {
@@ -74,29 +85,48 @@ func scanArticleRows(rows pgx.Rows) ([]models.Article, error) {
 			blocksJSON, sourcesJSON, socialJSON []byte
 			publishedAt, createdAt *time.Time
 			tags []string
+			subtitle, seoTitle, seoSlug, seoDescription string
+			sendWebpushr bool
+			relatedJSON []byte
 		)
 
-		err := rows.Scan(&id, &slug, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags)
+		err := rows.Scan(
+			&id, &slug, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, 
+			&blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, 
+			&excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags,
+			&subtitle, &seoTitle, &seoSlug, &seoDescription, &sendWebpushr, &relatedJSON,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("scan article row: %w", err)
 		}
 
 		art := models.Article{
-			ID:           id,
-			Slug:         slug,
-			Title:        title,
-			Category:     models.PillarCategory(category),
-			CategoryName: category,
-			Status:       models.PublishingStatus(status),
-			Tags:         tags,
-			IsLead:       isLead,
-			Urgent:       urgent,
+			ID:             id,
+			Slug:           slug,
+			Title:          title,
+			Category:       models.PillarCategory(category),
+			CategoryName:   category,
+			Status:         models.PublishingStatus(status),
+			Tags:           tags,
+			IsLead:         isLead,
+			Urgent:         urgent,
+			Subtitle:       subtitle,
+			SEOTitle:       seoTitle,
+			SEOSlug:        seoSlug,
+			SEODescription: seoDescription,
+			SendWebpushr:   sendWebpushr,
 		}
 		if kicker != nil {
 			art.Kicker = *kicker
 		}
 		if deck != nil {
 			art.Deck = *deck
+		}
+		if art.Subtitle == "" && deck != nil {
+			art.Subtitle = *deck
+		}
+		if art.Deck == "" && subtitle != "" {
+			art.Deck = subtitle
 		}
 		if coverImage != nil {
 			art.FeaturedImage.URL = *coverImage
@@ -137,6 +167,9 @@ func scanArticleRows(rows pgx.Rows) ([]models.Article, error) {
 		if len(socialJSON) > 0 {
 			_ = json.Unmarshal(socialJSON, &art.SocialVariants)
 		}
+		if len(relatedJSON) > 0 {
+			_ = json.Unmarshal(relatedJSON, &art.RelatedStories)
+		}
 
 		articles = append(articles, art)
 	}
@@ -152,9 +185,17 @@ func scanArticleRow(row pgx.Row, identifier string) (*models.Article, error) {
 		blocksJSON, sourcesJSON, socialJSON []byte
 		publishedAt, createdAt *time.Time
 		tags []string
+		subtitle, seoTitle, seoSlug, seoDescription string
+		sendWebpushr bool
+		relatedJSON []byte
 	)
 
-	err := row.Scan(&id, &slug, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, &blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, &excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags)
+	err := row.Scan(
+		&id, &slug, &title, &kicker, &deck, &category, &coverImage, &authorName, &authorRole, 
+		&blocksJSON, &sourcesJSON, &socialJSON, &readTime, &status, &candidateID, &aiNotes, 
+		&excerpt, &origURL, &isLead, &urgent, &publishedAt, &createdAt, &tags,
+		&subtitle, &seoTitle, &seoSlug, &seoDescription, &sendWebpushr, &relatedJSON,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -163,21 +204,32 @@ func scanArticleRow(row pgx.Row, identifier string) (*models.Article, error) {
 	}
 
 	art := &models.Article{
-		ID:           id,
-		Slug:         slug,
-		Title:        title,
-		Category:     models.PillarCategory(category),
-		CategoryName: category,
-		Status:       models.PublishingStatus(status),
-		Tags:         tags,
-		IsLead:       isLead,
-		Urgent:       urgent,
+		ID:             id,
+		Slug:           slug,
+		Title:          title,
+		Category:       models.PillarCategory(category),
+		CategoryName:   category,
+		Status:         models.PublishingStatus(status),
+		Tags:           tags,
+		IsLead:         isLead,
+		Urgent:         urgent,
+		Subtitle:       subtitle,
+		SEOTitle:       seoTitle,
+		SEOSlug:        seoSlug,
+		SEODescription: seoDescription,
+		SendWebpushr:   sendWebpushr,
 	}
 	if kicker != nil {
 		art.Kicker = *kicker
 	}
 	if deck != nil {
 		art.Deck = *deck
+	}
+	if art.Subtitle == "" && deck != nil {
+		art.Subtitle = *deck
+	}
+	if art.Deck == "" && subtitle != "" {
+		art.Deck = subtitle
 	}
 	if coverImage != nil {
 		art.FeaturedImage.URL = *coverImage
@@ -218,15 +270,15 @@ func scanArticleRow(row pgx.Row, identifier string) (*models.Article, error) {
 	if len(socialJSON) > 0 {
 		_ = json.Unmarshal(socialJSON, &art.SocialVariants)
 	}
+	if len(relatedJSON) > 0 {
+		_ = json.Unmarshal(relatedJSON, &art.RelatedStories)
+	}
 
 	return art, nil
 }
 
 func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, error) {
-	baseQuery := `
-		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
-		FROM articles
-	`
+	baseQuery := "SELECT " + articleSelectFields + " FROM articles"
 	var rows pgx.Rows
 	var err error
 
@@ -246,20 +298,12 @@ func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, er
 }
 
 func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
-		FROM articles
-		WHERE slug = $1
-	`, slug)
+	row := s.pool.QueryRow(ctx, "SELECT "+articleSelectFields+" FROM articles WHERE slug = $1", slug)
 	return scanArticleRow(row, slug)
 }
 
 func (s *PGStore) GetByID(ctx context.Context, id string) (*models.Article, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
-		FROM articles
-		WHERE id = $1
-	`, id)
+	row := s.pool.QueryRow(ctx, "SELECT "+articleSelectFields+" FROM articles WHERE id = $1", id)
 	return scanArticleRow(row, id)
 }
 
@@ -267,11 +311,7 @@ func (s *PGStore) GetByIDs(ctx context.Context, ids []string) ([]models.Article,
 	if len(ids) == 0 {
 		return []models.Article{}, nil
 	}
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
-		FROM articles
-		WHERE id = ANY($1)
-	`, ids)
+	rows, err := s.pool.Query(ctx, "SELECT "+articleSelectFields+" FROM articles WHERE id = ANY($1)", ids)
 	if err != nil {
 		return nil, fmt.Errorf("get articles by ids: %w", err)
 	}
@@ -306,10 +346,9 @@ func (s *PGStore) Search(ctx context.Context, query string, limit int) ([]models
 	}
 
 	pattern := "%" + trimmed + "%"
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, tags
+	rows, err := s.pool.Query(ctx, "SELECT "+articleSelectFields+`
 		FROM articles
-		WHERE title ILIKE $1 OR kicker ILIKE $1 OR deck ILIKE $1 OR category ILIKE $1 OR excerpt ILIKE $1 OR $2 = ANY(tags)
+		WHERE title ILIKE $1 OR kicker ILIKE $1 OR deck ILIKE $1 OR category ILIKE $1 OR excerpt ILIKE $1 OR subtitle ILIKE $1 OR $2 = ANY(tags)
 		ORDER BY published_at DESC LIMIT $3
 	`, pattern, trimmed, limit)
 	if err != nil {
@@ -318,6 +357,55 @@ func (s *PGStore) Search(ctx context.Context, query string, limit int) ([]models
 	defer rows.Close()
 
 	return scanArticleRows(rows)
+}
+
+func (s *PGStore) CheckSlugAvailable(ctx context.Context, slug string, excludeID string) (bool, error) {
+	var count int
+	var err error
+	if excludeID != "" {
+		err = s.pool.QueryRow(ctx, "SELECT count(*) FROM articles WHERE LOWER(slug) = LOWER($1) AND id != $2::uuid", slug, excludeID).Scan(&count)
+	} else {
+		err = s.pool.QueryRow(ctx, "SELECT count(*) FROM articles WHERE LOWER(slug) = LOWER($1)", slug).Scan(&count)
+	}
+	if err != nil {
+		return false, err
+	}
+	return count == 0, nil
+}
+
+func (s *PGStore) ListTags(ctx context.Context, query string) ([]string, error) {
+	var rows pgx.Rows
+	var err error
+	trimmed := strings.TrimSpace(query)
+	if trimmed != "" {
+		pattern := "%" + trimmed + "%"
+		rows, err = s.pool.Query(ctx, `
+			SELECT DISTINCT tag 
+			FROM (SELECT unnest(tags) AS tag FROM articles) t 
+			WHERE tag ILIKE $1 
+			ORDER BY tag ASC LIMIT 50
+		`, pattern)
+	} else {
+		rows, err = s.pool.Query(ctx, `
+			SELECT DISTINCT tag 
+			FROM (SELECT unnest(tags) AS tag FROM articles) t 
+			WHERE tag != '' 
+			ORDER BY tag ASC LIMIT 100
+		`)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list tags: %w", err)
+	}
+	defer rows.Close()
+
+	var tags []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err == nil && t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags, nil
 }
 
 func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
@@ -330,6 +418,10 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		sourcesBytes = []byte("[]")
 	}
 	socialBytes, _ := json.Marshal(a.SocialVariants)
+	relatedBytes, _ := json.Marshal(a.RelatedStories)
+	if a.RelatedStories == nil {
+		relatedBytes = []byte("[]")
+	}
 
 	var artID string
 	if _, err := uuid.Parse(a.ID); err == nil {
@@ -344,11 +436,28 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		tags = []string{}
 	}
 
+	if a.Subtitle != "" && a.Deck == "" {
+		a.Deck = a.Subtitle
+	} else if a.Deck != "" && a.Subtitle == "" {
+		a.Subtitle = a.Deck
+	}
+
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO articles (id, slug, title, kicker, deck, category, cover_image, author_name, author_role, blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, excerpt, original_url, is_lead, urgent, published_at, created_at, updated_at, tags)
-		VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13, $14, NULLIF($15, '')::uuid, $16, $17, $18, $19, $20, $21, $22, NOW(), $23)
+		INSERT INTO articles (
+			id, slug, title, kicker, deck, category, cover_image, author_name, author_role, 
+			blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, 
+			excerpt, original_url, is_lead, urgent, published_at, created_at, updated_at, tags,
+			subtitle, seo_title, seo_slug, seo_description, send_webpushr, related_stories
+		)
+		VALUES (
+			COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, 
+			$10::jsonb, $11::jsonb, $12::jsonb, $13, $14, NULLIF($15, '')::uuid, $16, 
+			$17, $18, $19, $20, $21, $22, NOW(), $23,
+			$24, $25, $26, $27, $28, $29::jsonb
+		)
 		ON CONFLICT (slug) DO UPDATE
 		SET title = EXCLUDED.title,
+		    subtitle = EXCLUDED.subtitle,
 		    kicker = EXCLUDED.kicker,
 		    deck = EXCLUDED.deck,
 		    category = EXCLUDED.category,
@@ -366,9 +475,14 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		    is_lead = EXCLUDED.is_lead,
 		    urgent = EXCLUDED.urgent,
 		    ai_review_notes = EXCLUDED.ai_review_notes,
+		    seo_title = EXCLUDED.seo_title,
+		    seo_slug = EXCLUDED.seo_slug,
+		    seo_description = EXCLUDED.seo_description,
+		    send_webpushr = EXCLUDED.send_webpushr,
+		    related_stories = EXCLUDED.related_stories,
 		    published_at = EXCLUDED.published_at,
 		    updated_at = NOW()
-	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, string(blocksBytes), string(sourcesBytes), string(socialBytes), a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags)
+	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, string(blocksBytes), string(sourcesBytes), string(socialBytes), a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags, a.Subtitle, a.SEOTitle, a.SEOSlug, a.SEODescription, a.SendWebpushr, string(relatedBytes))
 
 	if err != nil {
 		return fmt.Errorf("upsert article %q: %w", a.Slug, err)
@@ -1138,6 +1252,44 @@ func (m *MemoryStore) Publish(ctx context.Context, idOrSlug string, publishedBy 
 	art.PublishedBy = publishedBy
 	m.articles[targetKey] = art
 	return &art, nil
+}
+
+func (m *MemoryStore) CheckSlugAvailable(ctx context.Context, slug string, excludeID string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	lower := strings.ToLower(slug)
+	for _, a := range m.articles {
+		if strings.ToLower(a.Slug) == lower {
+			if excludeID != "" && a.ID == excludeID {
+				continue
+			}
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (m *MemoryStore) ListTags(ctx context.Context, query string) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	tagSet := make(map[string]struct{})
+	lower := strings.ToLower(strings.TrimSpace(query))
+	for _, a := range m.articles {
+		for _, t := range a.Tags {
+			if t == "" {
+				continue
+			}
+			if lower == "" || strings.Contains(strings.ToLower(t), lower) {
+				tagSet[t] = struct{}{}
+			}
+		}
+	}
+	res := make([]string, 0, len(tagSet))
+	for t := range tagSet {
+		res = append(res, t)
+	}
+	sort.Strings(res)
+	return res, nil
 }
 
 func (m *MemoryStore) ListCandidates(ctx context.Context) ([]models.SuggestedStory, error) {

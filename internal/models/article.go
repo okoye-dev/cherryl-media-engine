@@ -5,6 +5,18 @@ import "time"
 type PillarCategory string
 
 const (
+	CategoryStateAffairs            PillarCategory = "state-affairs-environs"
+	CategoryNewsbeat                PillarCategory = "newsbeat"
+	CategoryBrandsSMEs              PillarCategory = "brands-smes"
+	CategoryOpinions                PillarCategory = "opinions"
+	CategorySports                  PillarCategory = "sports"
+	CategoryEntertainmentLifestyle  PillarCategory = "entertainment-lifestyle"
+	CategoryEducation               PillarCategory = "education"
+	CategoryThrillsTricks           PillarCategory = "thrills-tricks"
+	CategoryYouthCorner             PillarCategory = "youth-corner"
+	CategoryTourHotels              PillarCategory = "tour-hotels"
+
+	// Legacy aliases for backward compatibility
 	CategoryCurrentAffairs PillarCategory = "nigerian-current-affairs"
 	CategoryEntertainment  PillarCategory = "entertainment-internet-culture"
 	CategoryPractical      PillarCategory = "practical-nigerian-updates"
@@ -22,6 +34,8 @@ const (
 )
 
 type ContentBlock struct {
+	ID         string `json:"id,omitempty"`
+	OrderID    int    `json:"order_id,omitempty"`
 	Type       string `json:"type"`
 	Text       string `json:"text,omitempty"`
 	IsDropCap  bool   `json:"isDropCap,omitempty"`
@@ -44,6 +58,7 @@ type ContentBlock struct {
 	VideoURL   string `json:"videoUrl,omitempty"`
 	ReadTime   string `json:"readTime,omitempty"`
 	Verified   bool   `json:"verified,omitempty"`
+	ImageURL   string `json:"imageUrl,omitempty"`
 }
 
 type Author struct {
@@ -103,6 +118,7 @@ type Article struct {
 	ID             string           `json:"id"`
 	Slug           string           `json:"slug"`
 	Title          string           `json:"title"`
+	Subtitle       string           `json:"subtitle,omitempty"`
 	Kicker         string           `json:"kicker,omitempty"`
 	Deck           string           `json:"deck,omitempty"`
 	Category       PillarCategory   `json:"category"`
@@ -116,7 +132,12 @@ type Article struct {
 	OriginalURL    string           `json:"originalUrl,omitempty"`
 	IsLead         bool             `json:"isLead,omitempty"`
 	Urgent         bool             `json:"urgent,omitempty"`
+	SendWebpushr   bool             `json:"send_webpushr,omitempty"`
+	SEOTitle       string           `json:"seo_title,omitempty"`
+	SEOSlug        string           `json:"seo_slug,omitempty"`
+	SEODescription string           `json:"seo_description,omitempty"`
 	Body           []ContentBlock   `json:"body"`
+	RelatedStories []ContentBlock   `json:"related_stories,omitempty"`
 	Sources        []SourceCitation `json:"sources,omitempty"`
 	SocialVariants SocialVariants   `json:"socialVariants,omitempty"`
 	CandidateID    string           `json:"candidateId,omitempty"`

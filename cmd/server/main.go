@@ -116,6 +116,8 @@ func main() {
 	mux.HandleFunc("GET /api/auth/me", authHandler.Me)
 
 	// Article routes
+	mux.HandleFunc("GET /api/articles/check-slug", articleHandler.CheckSlug)
+	mux.HandleFunc("GET /api/tags", articleHandler.ListTags)
 	mux.HandleFunc("GET /api/articles", articleHandler.ListArticles)
 	mux.HandleFunc("GET /api/articles/", articleHandler.GetArticle)
 	mux.HandleFunc("POST /api/articles", articleHandler.SaveArticle)
