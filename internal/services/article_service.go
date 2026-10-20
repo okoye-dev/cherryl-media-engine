@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 	"github.com/okoye-dev/cherryl-media-engine/internal/urlutil"
@@ -121,7 +121,7 @@ func (s *articleService) SaveArticle(ctx context.Context, art *models.Article) (
 	}
 
 	if art.ID == "" {
-		art.ID = "art-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
+		art.ID = uuid.New().String()
 	}
 
 	if art.CreatedAt.IsZero() {

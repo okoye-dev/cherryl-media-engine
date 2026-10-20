@@ -119,7 +119,7 @@ func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, 
 }
 
 func (s *PGStore) GetByID(ctx context.Context, id string) (*models.Article, error) {
-	row := s.pool.QueryRow(ctx, "SELECT "+articleSelectFields+" FROM articles WHERE id = $1", id)
+	row := s.pool.QueryRow(ctx, "SELECT "+articleSelectFields+" FROM articles WHERE id::text = $1", id)
 	return scanArticleRow(row, id)
 }
 
@@ -268,7 +268,7 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		a.Subtitle = a.Deck
 	}
 
-	_, err := s.pool.Exec(ctx, `
+	err := s.pool.QueryRow(ctx, `
 		INSERT INTO articles (
 			id, slug, title, kicker, deck, category, cover_image, author_name, author_role, 
 			blocks, sources, social_variants, read_time, status, candidate_id, ai_review_notes, 
@@ -312,7 +312,8 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		    media_confirmed = EXCLUDED.media_confirmed,
 		    published_at = EXCLUDED.published_at,
 		    updated_at = NOW()
-	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, string(blocksBytes), string(sourcesBytes), string(socialBytes), a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags, a.Subtitle, a.SEOTitle, a.SEOSlug, a.SEODescription, a.SendWebpushr, string(relatedBytes), a.IsFeatured, a.MediaConfirmed)
+		RETURNING id, created_at, published_at
+	`, artID, a.Slug, a.Title, a.Kicker, a.Deck, string(a.Category), a.FeaturedImage.URL, a.Author.Name, a.Author.Role, string(blocksBytes), string(sourcesBytes), string(socialBytes), a.ReadTime, string(a.Status), a.CandidateID, a.AIReviewNotes, a.Excerpt, a.OriginalURL, a.IsLead, a.Urgent, a.PublishedAt, a.CreatedAt, tags, a.Subtitle, a.SEOTitle, a.SEOSlug, a.SEODescription, a.SendWebpushr, string(relatedBytes), a.IsFeatured, a.MediaConfirmed).Scan(&a.ID, &a.CreatedAt, &a.PublishedAt)
 
 	if err != nil {
 		return fmt.Errorf("upsert article %q: %w", a.Slug, err)
