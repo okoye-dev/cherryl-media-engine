@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/okoye-dev/cherryl-media-engine/internal/httputil"
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
 	"github.com/okoye-dev/cherryl-media-engine/internal/storage"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
@@ -107,7 +108,7 @@ func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		http.Error(w, `{"error":"failed to fetch articles"}`, http.StatusInternalServerError)
+		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch articles")
 		return
 	}
 
@@ -115,13 +116,12 @@ func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 		h.ResolveMedia(&articles[i])
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(articles)
+	httputil.WriteJSON(w, http.StatusOK, articles)
 }
 
 func (h *ArticleHandler) PublishArticle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodPost {
-		http.Error(w, `{"error":"Method not allowed"}`, http.StatusMethodNotAllowed)
+		httputil.WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Method not allowed")
 		return
 	}
 
@@ -129,25 +129,23 @@ func (h *ArticleHandler) PublishArticle(w http.ResponseWriter, r *http.Request) 
 	id = strings.TrimSuffix(id, "/publish")
 	id = strings.TrimSpace(id)
 	if id == "" {
-		http.Error(w, `{"error":"article id or slug is required"}`, http.StatusBadRequest)
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_PARAM", "Article ID or slug is required")
 		return
 	}
 
 	publishedBy := "editor"
 	art, err := h.store.Publish(r.Context(), id, publishedBy)
 	if errors.Is(err, store.ErrNotFound) {
-		http.NotFound(w, r)
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Article not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusBadRequest)
+		httputil.WriteError(w, http.StatusBadRequest, "PUBLISH_FAILED", err.Error())
 		return
 	}
 
 	h.ResolveMedia(art)
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"article": art,
 	})
@@ -158,39 +156,37 @@ func (h *ArticleHandler) GetArticle(w http.ResponseWriter, r *http.Request) {
 	slug = strings.TrimSuffix(slug, "/publish")
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
-		http.NotFound(w, r)
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Article not found")
 		return
 	}
 
 	art, err := h.store.GetBySlug(r.Context(), slug)
 	if errors.Is(err, store.ErrNotFound) {
-		// Also fallback to lookup by ID
+		// Fallback to lookup by ID
 		art, err = h.store.GetByID(r.Context(), slug)
 	}
 	if errors.Is(err, store.ErrNotFound) {
-		http.NotFound(w, r)
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Article not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, `{"error":"failed to fetch article"}`, http.StatusInternalServerError)
+		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch article")
 		return
 	}
 
 	h.ResolveMedia(art)
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(art)
+	httputil.WriteJSON(w, http.StatusOK, art)
 }
 
 func (h *ArticleHandler) SaveArticle(w http.ResponseWriter, r *http.Request) {
 	var art models.Article
 	if err := json.NewDecoder(r.Body).Decode(&art); err != nil {
-		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid JSON request body")
 		return
 	}
 
 	if art.Title == "" {
-		http.Error(w, `{"error":"title is required"}`, http.StatusBadRequest)
+		httputil.WriteError(w, http.StatusBadRequest, "VALIDATION_FAILED", "Post title cannot be empty")
 		return
 	}
 
@@ -212,15 +208,12 @@ func (h *ArticleHandler) SaveArticle(w http.ResponseWriter, r *http.Request) {
 	h.NormalizeMediaKeys(&art)
 
 	if err := h.store.Save(r.Context(), &art); err != nil {
-		http.Error(w, `{"error":"failed to save article: `+err.Error()+`"}`, http.StatusInternalServerError)
+		httputil.WriteError(w, http.StatusInternalServerError, "SAVE_FAILED", "Failed to save article: "+err.Error())
 		return
 	}
 
 	h.ResolveMedia(&art)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"article": art,
 	})
@@ -229,51 +222,46 @@ func (h *ArticleHandler) SaveArticle(w http.ResponseWriter, r *http.Request) {
 func (h *ArticleHandler) ListCandidates(w http.ResponseWriter, r *http.Request) {
 	candidates, err := h.store.ListCandidates(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"failed to fetch suggested candidates"}`, http.StatusInternalServerError)
+		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch candidates")
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(candidates)
+	httputil.WriteJSON(w, http.StatusOK, candidates)
 }
 
 func (h *ArticleHandler) GetCandidate(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/candidates/")
 	id = strings.TrimSpace(id)
 	if id == "" {
-		http.NotFound(w, r)
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Candidate not found")
 		return
 	}
 
 	candidate, err := h.store.GetCandidate(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
-		http.NotFound(w, r)
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Candidate not found")
 		return
 	}
 	if err != nil {
-		http.Error(w, `{"error":"failed to fetch candidate"}`, http.StatusInternalServerError)
+		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch candidate")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(candidate)
+	httputil.WriteJSON(w, http.StatusOK, candidate)
 }
 
 func (h *ArticleHandler) ListSources(w http.ResponseWriter, r *http.Request) {
 	sources, err := h.store.ListSources(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"failed to fetch sources"}`, http.StatusInternalServerError)
+		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch sources")
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(sources)
+	httputil.WriteJSON(w, http.StatusOK, sources)
 }
 
 func (h *ArticleHandler) ResolveLink(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
 	if targetURL == "" {
-		http.Error(w, `{"error":"url parameter is required"}`, http.StatusBadRequest)
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_PARAM", "URL parameter is required")
 		return
 	}
 
@@ -286,25 +274,23 @@ func (h *ArticleHandler) ResolveLink(w http.ResponseWriter, r *http.Request) {
 		"slug":       slug,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(response)
+	httputil.WriteJSON(w, http.StatusOK, response)
 }
 
 func (h *ArticleHandler) CheckSlug(w http.ResponseWriter, r *http.Request) {
 	slug := strings.TrimSpace(r.URL.Query().Get("slug"))
 	if slug == "" {
-		http.Error(w, `{"error":"slug parameter is required"}`, http.StatusBadRequest)
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_PARAM", "Slug parameter is required")
 		return
 	}
 	excludeID := strings.TrimSpace(r.URL.Query().Get("excludeId"))
 	available, err := h.store.CheckSlugAvailable(r.Context(), slug, excludeID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to check slug: `+err.Error()+`"}`, http.StatusInternalServerError)
+		httputil.WriteError(w, http.StatusInternalServerError, "CHECK_FAILED", "Failed to check slug availability: "+err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"slug":      slug,
 		"available": available,
 	})
@@ -314,12 +300,11 @@ func (h *ArticleHandler) ListTags(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	tags, err := h.store.ListTags(r.Context(), q)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list tags: `+err.Error()+`"}`, http.StatusInternalServerError)
+		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to list tags: "+err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"tags": tags,
 	})
 }

@@ -4,3 +4,4 @@ uploads/
 !.env.example
 *.local
 .DS_Store
+.local-notes/
