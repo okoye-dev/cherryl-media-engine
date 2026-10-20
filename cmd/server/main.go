@@ -32,7 +32,8 @@ func isAllowedOrigin(origin string) bool {
 		hostname == "127.0.0.1" ||
 		strings.HasSuffix(hostname, ".local") ||
 		strings.HasSuffix(hostname, "cherrylmedia.com") ||
-		strings.HasSuffix(hostname, "vercel.app")
+		strings.HasSuffix(hostname, "vercel.app") ||
+		strings.HasSuffix(hostname, "onrender.com")
 }
 
 func securityMiddleware(next http.Handler) http.Handler {
