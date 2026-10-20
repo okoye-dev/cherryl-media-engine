@@ -1,0 +1,78 @@
+{
+  "target_pillars": [
+    "state-affairs-environs",
+    "newsbeat",
+    "brands-smes",
+    "opinions",
+    "sports",
+    "entertainment-lifestyle",
+    "education",
+    "thrills-tricks",
+    "youth-corner",
+    "tour-hotels"
+  ],
+  "corrections": {
+    "BRAND & SMEs": "BRANDS & SMEs",
+    "brand-smes": "brands-smes",
+    "OPINION": "OPINIONS",
+    "opinion": "opinions",
+    "entertainment-lifestyle-world": "entertainment-lifestyle"
+  },
+  "direct_mappings": {
+    "state-affairs-environs": "state-affairs-environs",
+    "newsbeat": "newsbeat",
+    "brand-smes": "brands-smes",
+    "brands-smes": "brands-smes",
+    "opinion": "opinions",
+    "opinions": "opinions",
+    "sports": "sports",
+    "entertainment-lifestyle": "entertainment-lifestyle",
+    "entertainment-lifestyle-world": "entertainment-lifestyle",
+    "education": "education",
+    "thrills-tricks": "thrills-tricks",
+    "youth-corner": "youth-corner",
+    "tour-hotels": "tour-hotels"
+  },
+  "non_pillar_fallbacks": {
+    "art-comics": {
+      "target_category": "entertainment-lifestyle",
+      "add_tag": "Art & Comics"
+    },
+    "book-video-review": {
+      "target_category": "entertainment-lifestyle",
+      "add_tag": "Book & Video Review"
+    },
+    "events": {
+      "target_category": "entertainment-lifestyle",
+      "add_tag": "Events"
+    },
+    "fashion-fragrance": {
+      "target_category": "entertainment-lifestyle",
+      "add_tag": "Fashion & Fragrance"
+    },
+    "food-wine-2": {
+      "target_category": "entertainment-lifestyle",
+      "add_tag": "Food & Wine"
+    },
+    "healthy-living": {
+      "target_category": "thrills-tricks",
+      "add_tag": "Healthy Living"
+    },
+    "interviews": {
+      "target_category": "opinions",
+      "add_tag": "Interviews"
+    },
+    "personality-interview": {
+      "target_category": "opinions",
+      "add_tag": "Personality Interview"
+    },
+    "score-card-award": {
+      "target_category": "state-affairs-environs",
+      "add_tag": "Score Card & Award"
+    },
+    "uncategorized": {
+      "target_category": "newsbeat",
+      "add_tag": "Legacy Archive"
+    }
+  }
+}
