@@ -31,7 +31,7 @@ func Run(ctx context.Context, s SeedableStore) error {
 	adminPassHash, err := auth.HashPassword(adminPass)
 	if err == nil {
 		adminUser := &auth.User{
-			ID:        "usr-admin-01",
+			ID:        "e0000000-0000-0000-0000-000000000001",
 			Email:     "admin@cherrylmedia.com",
 			FullName:  "Newsroom Editor",
 			Role:      "admin",

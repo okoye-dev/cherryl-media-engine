@@ -670,12 +670,16 @@ func (s *PGStore) GetUserByID(ctx context.Context, id string) (*auth.User, error
 }
 
 func (s *PGStore) CreateUser(ctx context.Context, u *auth.User, passwordHash string) error {
+	var uid string
+	if _, err := uuid.Parse(u.ID); err == nil {
+		uid = u.ID
+	}
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO users (id, email, password_hash, full_name, role, avatar_url, active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+		VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $8)
 		ON CONFLICT (email) DO UPDATE
 		SET password_hash = $3, full_name = $4, role = $5, active = $7
-	`, u.ID, u.Email, passwordHash, u.FullName, u.Role, u.AvatarURL, u.Active, u.CreatedAt)
+	`, uid, u.Email, passwordHash, u.FullName, u.Role, u.AvatarURL, u.Active, u.CreatedAt)
 	return err
 }
 
