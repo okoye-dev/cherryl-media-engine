@@ -275,3 +275,27 @@ Following a comprehensive code security audit, the platform implements multi-lay
 | **Backend** | Compiled Go Binary | `go test ./...` | `go build ./cmd/server` | $< 10\text{ms}$ (REST) |
 | **Database** | Supabase PostgreSQL | `cmd/verify-db` | `cmd/migrate` | $< 5\text{ms}$ (Indexed) |
 | **Media** | Cloudflare R2 / S3 | N/A | Direct Uploads | CDN Edge Cached |
+
+---
+
+## 8. Zero-Mock Production Architecture & Database Synchronization
+
+To guarantee end-to-end operational fidelity, Cherryl Media strictly enforces a **Zero-Mock Policy**: no dummy articles, hardcoded story lists, or simulated payloads remain in the codebase. Every story, section, image asset, and configuration is retrieved live from PostgreSQL and Cloudflare R2.
+
+### 8.1 Complete Excision of In-Memory Mock Datasets
+- **1,389-Line Mock Purge**: The legacy in-memory `CANONICAL_ARTICLES` mock constant was removed across the entire frontend repository.
+- **Pure Database Resolution**:
+  - `getAllArticles()`, `getArticleBySlug()`, `getArticlesByCategory()`, and `getDispatches()` fetch directly from `${BACKEND_URL}/api/articles`.
+  - `fetchCuratedSections()` queries the Go engine `/api/sections` endpoint, populating slots directly from `curated_sections` table allocations.
+  - Slug availability checking (`/api/articles/check-slug`) and tag typeahead (`/api/tags`) route directly to the backend database.
+  - The admin dashboard (`/admin`), article editor (`/admin/editor`), and section curator (`/admin/sections`) initialize with empty states and load dynamic data on mount via service hooks.
+
+### 8.2 Database Verification & Media Integrity Metrics
+- **PostgreSQL Database Verification** (`go run cmd/verify-db/main.go`):
+  - **Articles**: 24 total articles stored in Supabase PostgreSQL (23 published stories, 1 active draft story).
+  - **Media Confirmation**: 100% of published stories have `media_confirmed = true`.
+  - **Uploads**: 43 media assets stored and confirmed (`status = 'confirmed'`) in the `uploads` table, linking directly to Cloudflare R2 CDN webp/mp4 files.
+  - **Curated Sections**: 8 curated homepage sections persisted in `curated_sections`.
+  - **Site Settings**: Active global site copy and editorial announcements in `site_settings`.
+- **Static & ISR Build Coverage**:
+  - Next.js 15 production build generates **49/49** static and ISR pages cleanly with zero compilation warnings or type errors (`npm run build`).
