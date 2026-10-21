@@ -141,9 +141,14 @@ func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	}
 	idsParam := r.URL.Query().Get("ids")
 	page := httputil.ParsePage(r, 20, 100)
-	// The public only ever gets live stories, whatever status they ask for.
+	// Drafts and "all" are for admins. Refuse (rather than quietly show live stories) so the
+	// admin screen notices it is signed out and asks the person to sign in.
 	isAdmin := h.admin(r)
 	if !isAdmin {
+		if status != "" && status != "published" {
+			httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "Sign in to see drafts."})
+			return
+		}
 		status = "published"
 	}
 
