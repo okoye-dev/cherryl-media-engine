@@ -31,12 +31,20 @@ func withDraft(t *testing.T, asAdmin bool) (*ArticleHandler, string) {
 func TestPublicNeverSeesDrafts(t *testing.T) {
 	h, _ := withDraft(t, false)
 
-	// Asking for drafts, or everything, still returns live stories only.
-	for _, status := range []string{"draft", "all", ""} {
+	// Asking for drafts or everything is refused, so the admin screen knows to ask for a sign-in.
+	for _, status := range []string{"draft", "all"} {
 		w := httptest.NewRecorder()
 		h.ListArticles(w, httptest.NewRequest(http.MethodGet, "/api/articles?status="+status, nil))
-		if strings.Contains(w.Body.String(), "secret-draft") {
-			t.Errorf("status=%q leaked a draft: %s", status, w.Body.String())
+		if w.Code != http.StatusUnauthorized || strings.Contains(w.Body.String(), "secret-draft") {
+			t.Errorf("status=%q: want 401 and no draft, got %d: %s", status, w.Code, w.Body.String())
+		}
+	}
+	// The plain list is live stories only.
+	for _, status := range []string{"", "published"} {
+		w := httptest.NewRecorder()
+		h.ListArticles(w, httptest.NewRequest(http.MethodGet, "/api/articles?status="+status, nil))
+		if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "secret-draft") {
+			t.Errorf("status=%q: want 200 without the draft, got %d: %s", status, w.Code, w.Body.String())
 		}
 	}
 	// A search must not find a draft either.

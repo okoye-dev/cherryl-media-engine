@@ -70,11 +70,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Authenticate against Supabase Auth if configured
 	if h.supabase.URL != "" && (h.supabase.PublishableKey != "" || h.supabase.SecretKey != "") {
-		if sbResp, err := h.loginWithSupabase(r.Context(), email, req.Password); err == nil {
-			if sbResp.User.Role != auth.RoleAdmin {
-				http.Error(w, `{"error":"This account does not have admin access."}`, http.StatusForbidden)
-				return
-			}
+		// A Supabase account counts only if it is an admin. Otherwise carry on to the local admin account.
+		if sbResp, err := h.loginWithSupabase(r.Context(), email, req.Password); err == nil && sbResp.User.Role == auth.RoleAdmin {
 			h.limiter.clear(emailKey)
 			http.SetCookie(w, &http.Cookie{
 				Name:     "cherryl_token",
