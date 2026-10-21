@@ -11,6 +11,8 @@ import (
 type Config struct {
 	Port           string
 	JWTSecret      string
+	AdminEmail     string
+	AdminPassword  string
 	AllowedOrigins []string
 	Database       DatabaseConfig
 	Supabase       SupabaseConfig
@@ -56,6 +58,8 @@ func Load() *Config {
 	cfg := &Config{
 		Port:           getEnv("PORT", "8080"),
 		JWTSecret:      getEnv("JWT_SECRET", ""),
+		AdminEmail:     getEnv("ADMIN_EMAIL", ""),
+		AdminPassword:  getEnv("ADMIN_PASSWORD", ""),
 		AllowedOrigins: getEnvList("ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://127.0.0.1:3000"}),
 		Database: DatabaseConfig{
 			URL: getEnv("DATABASE_URL", ""),

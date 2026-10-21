@@ -141,12 +141,29 @@ func main() {
 	sectionService := services.NewSectionService(sectionStore, articleStore, mediaResolver)
 	settingsService := services.NewSettingsService(settingsStore)
 
+	// The admin account comes from ADMIN_EMAIL and ADMIN_PASSWORD (set both on the host).
+	if changed, err := auth.EnsureAdmin(context.Background(), userStore, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+		log.Printf("Warning: admin account not set up: %v", err)
+	} else if changed {
+		log.Printf("Admin account ready: %s", cfg.AdminEmail)
+	} else if cfg.AdminEmail == "" || cfg.AdminPassword == "" {
+		log.Println("ADMIN_EMAIL / ADMIN_PASSWORD not set: no admin account is created or changed on this start.")
+	}
+	if cfg.JWTSecret == "" && !cfg.Supabase.IsAuthEnabled() {
+		log.Println("Warning: JWT_SECRET is empty, so nobody can sign in. Set JWT_SECRET on the host.")
+	}
+
+	// Anything that changes data or shows private data goes through admin(). Reading published
+	// content stays public, because the website needs it.
+	admin := func(h http.HandlerFunc) http.HandlerFunc { return auth.RequireAdmin(cfg.JWTSecret, h) }
+	isAdmin := func(r *http.Request) bool { return auth.IsAdmin(r, cfg.JWTSecret) }
+
 	mux := http.NewServeMux()
-	articleHandler := handlers.NewArticleHandlerWithService(articleService)
+	articleHandler := handlers.NewArticleHandlerWithService(articleService).WithAdminCheck(isAdmin)
 	uploadHandler := handlers.NewUploadHandler(s3Storage, uploadStore)
 	authHandler := handlers.NewAuthHandler(userStore, cfg.JWTSecret, cfg.Supabase)
 	settingsHandler := handlers.NewSettingsHandlerWithService(settingsService)
-	sectionsHandler := handlers.NewSectionsHandlerWithService(sectionService)
+	sectionsHandler := handlers.NewSectionsHandlerWithService(sectionService).WithAdminCheck(isAdmin)
 	subscriberHandler := handlers.NewSubscriberHandler(subscriberStore)
 
 	// Authentication routes
@@ -155,51 +172,51 @@ func main() {
 	mux.HandleFunc("GET /api/auth/me", authHandler.Me)
 
 	// Article routes
-	mux.HandleFunc("GET /api/articles/check-slug", articleHandler.CheckSlug)
+	mux.HandleFunc("GET /api/articles/check-slug", admin(articleHandler.CheckSlug))
 	mux.HandleFunc("GET /api/tags", articleHandler.ListTags)
 	mux.HandleFunc("GET /api/articles/featured", articleHandler.GetFeatured)
-	mux.HandleFunc("POST /api/articles/{id}/featured", articleHandler.SetFeatured)
-	mux.HandleFunc("PUT /api/articles/{id}/featured", articleHandler.SetFeatured)
-	mux.HandleFunc("GET /api/curation/search", articleHandler.SearchCurated)
+	mux.HandleFunc("POST /api/articles/{id}/featured", admin(articleHandler.SetFeatured))
+	mux.HandleFunc("PUT /api/articles/{id}/featured", admin(articleHandler.SetFeatured))
+	mux.HandleFunc("GET /api/curation/search", admin(articleHandler.SearchCurated))
 	mux.HandleFunc("GET /api/articles", articleHandler.ListArticles)
 	mux.HandleFunc("GET /api/articles/", articleHandler.GetArticle)
-	mux.HandleFunc("POST /api/articles", articleHandler.SaveArticle)
-	mux.HandleFunc("PATCH /api/articles/{id}", articleHandler.PatchArticle)
-	mux.HandleFunc("POST /api/articles/{id}/publish", articleHandler.PublishArticle)
-	mux.HandleFunc("PUT /api/articles/{id}/publish", articleHandler.PublishArticle)
-	mux.HandleFunc("GET /api/links/resolve", articleHandler.ResolveLink)
+	mux.HandleFunc("POST /api/articles", admin(articleHandler.SaveArticle))
+	mux.HandleFunc("PATCH /api/articles/{id}", admin(articleHandler.PatchArticle))
+	mux.HandleFunc("POST /api/articles/{id}/publish", admin(articleHandler.PublishArticle))
+	mux.HandleFunc("PUT /api/articles/{id}/publish", admin(articleHandler.PublishArticle))
+	mux.HandleFunc("GET /api/links/resolve", admin(articleHandler.ResolveLink))
 
 	// Notification subscribers routes
-	mux.HandleFunc("GET /api/subscribers", subscriberHandler.ListSubscribers)
+	mux.HandleFunc("GET /api/subscribers", admin(subscriberHandler.ListSubscribers))
 	mux.HandleFunc("POST /api/subscribers", subscriberHandler.AddSubscriber)
-	mux.HandleFunc("DELETE /api/subscribers", subscriberHandler.RemoveSubscriber)
-	mux.HandleFunc("GET /api/subscribers/dispatches", subscriberHandler.ListDispatches)
+	mux.HandleFunc("DELETE /api/subscribers", admin(subscriberHandler.RemoveSubscriber))
+	mux.HandleFunc("GET /api/subscribers/dispatches", admin(subscriberHandler.ListDispatches))
 
 	// Curated layout sections routes
 	mux.HandleFunc("GET /api/sections", sectionsHandler.GetSections)
 	mux.HandleFunc("GET /api/sections/", sectionsHandler.GetSectionByKey)
-	mux.HandleFunc("POST /api/sections", sectionsHandler.UpdateSections)
-	mux.HandleFunc("PUT /api/sections", sectionsHandler.UpdateSections)
+	mux.HandleFunc("POST /api/sections", admin(sectionsHandler.UpdateSections))
+	mux.HandleFunc("PUT /api/sections", admin(sectionsHandler.UpdateSections))
 
 	// Site settings & configurable copy routes
 	mux.HandleFunc("GET /api/settings", settingsHandler.GetSettings)
-	mux.HandleFunc("POST /api/settings", settingsHandler.UpdateSettings)
-	mux.HandleFunc("PUT /api/settings", settingsHandler.UpdateSettings)
-	mux.HandleFunc("PUT /api/settings/editorial-copy", settingsHandler.SaveEditorialCopy)
-	mux.HandleFunc("PATCH /api/settings/editorial-copy", settingsHandler.PatchEditorialCopy)
-	mux.HandleFunc("POST /api/settings/editorial-copy", settingsHandler.SaveEditorialCopy)
+	mux.HandleFunc("POST /api/settings", admin(settingsHandler.UpdateSettings))
+	mux.HandleFunc("PUT /api/settings", admin(settingsHandler.UpdateSettings))
+	mux.HandleFunc("PUT /api/settings/editorial-copy", admin(settingsHandler.SaveEditorialCopy))
+	mux.HandleFunc("PATCH /api/settings/editorial-copy", admin(settingsHandler.PatchEditorialCopy))
+	mux.HandleFunc("POST /api/settings/editorial-copy", admin(settingsHandler.SaveEditorialCopy))
 
 	// AI discovery candidates and sources routes
-	mux.HandleFunc("GET /api/candidates", articleHandler.ListCandidates)
-	mux.HandleFunc("GET /api/candidates/", articleHandler.GetCandidate)
-	mux.HandleFunc("GET /api/sources", articleHandler.ListSources)
+	mux.HandleFunc("GET /api/candidates", admin(articleHandler.ListCandidates))
+	mux.HandleFunc("GET /api/candidates/", admin(articleHandler.GetCandidate))
+	mux.HandleFunc("GET /api/sources", admin(articleHandler.ListSources))
 
 	// Presigned S3 upload & confirm landing routes
-	mux.HandleFunc("POST /api/uploads/presign", uploadHandler.PresignUpload)
-	mux.HandleFunc("POST /api/uploads/confirm", uploadHandler.ConfirmUpload)
-	mux.HandleFunc("POST /api/files/presign-upload", uploadHandler.PresignUpload)
-	mux.HandleFunc("PUT /api/uploads/direct", uploadHandler.DirectUpload)
-	mux.HandleFunc("POST /api/uploads/direct", uploadHandler.DirectUpload)
+	mux.HandleFunc("POST /api/uploads/presign", admin(uploadHandler.PresignUpload))
+	mux.HandleFunc("POST /api/uploads/confirm", admin(uploadHandler.ConfirmUpload))
+	mux.HandleFunc("POST /api/files/presign-upload", admin(uploadHandler.PresignUpload))
+	mux.HandleFunc("PUT /api/uploads/direct", admin(uploadHandler.DirectUpload))
+	mux.HandleFunc("POST /api/uploads/direct", admin(uploadHandler.DirectUpload))
 
 	// Local uploaded files static server (fallback)
 	_ = os.MkdirAll("./uploads", 0755)

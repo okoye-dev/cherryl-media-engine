@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
 	"github.com/okoye-dev/cherryl-media-engine/internal/services"
@@ -14,6 +15,30 @@ import (
 
 type SectionsHandler struct {
 	service services.SectionService
+	isAdmin func(*http.Request) bool
+}
+
+// WithAdminCheck sets how the handler recognises an admin. Everyone else only sees live stories in sections.
+func (h *SectionsHandler) WithAdminCheck(f func(*http.Request) bool) *SectionsHandler {
+	h.isAdmin = f
+	return h
+}
+
+// hideUnpublished removes draft and scheduled stories from a section for the public.
+func (h *SectionsHandler) hideUnpublished(r *http.Request, secs ...*models.CuratedSection) {
+	if h.isAdmin != nil && h.isAdmin(r) {
+		return
+	}
+	now := time.Now()
+	for _, sec := range secs {
+		live := make([]models.Article, 0, len(sec.Articles))
+		for _, a := range sec.Articles {
+			if a.Status == models.StatusPublished && !a.PublishedAt.After(now) {
+				live = append(live, a)
+			}
+		}
+		sec.Articles = live
+	}
 }
 
 func NewSectionsHandler(secStore store.SectionStore, artStore store.ArticleStore, st storage.Storage) *SectionsHandler {
@@ -32,6 +57,14 @@ func (h *SectionsHandler) GetSections(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, `{"error":"failed to fetch curated sections"}`, http.StatusInternalServerError)
 		return
+	}
+
+	for i := range sections {
+		h.hideUnpublished(r, &sections[i])
+	}
+	for k, v := range byKey {
+		h.hideUnpublished(r, &v)
+		byKey[k] = v
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -59,6 +92,8 @@ func (h *SectionsHandler) GetSectionByKey(w http.ResponseWriter, r *http.Request
 		http.Error(w, `{"error":"failed to fetch section"}`, http.StatusInternalServerError)
 		return
 	}
+
+	h.hideUnpublished(r, sec)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(sec)
