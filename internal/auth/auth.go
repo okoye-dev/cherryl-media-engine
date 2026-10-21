@@ -37,21 +37,18 @@ func (c *Claims) ToUser() *User {
 		}
 	}
 
+	// The role is only trusted from places a visitor cannot edit: the token's own role claim
+	// (set by this server) or Supabase's app_metadata (set by an admin). user_metadata is
+	// editable by the signed-in person, so it is never used to decide access.
 	role := c.Role
 	if role == "" || role == "authenticated" {
+		role = ""
 		if c.AppMetadata != nil {
 			if r, ok := c.AppMetadata["role"].(string); ok && r != "" {
 				role = r
 			}
 		}
-		if role == "" || role == "authenticated" {
-			if c.UserMetadata != nil {
-				if r, ok := c.UserMetadata["role"].(string); ok && r != "" {
-					role = r
-				}
-			}
-		}
-		if role == "" || role == "authenticated" {
+		if role == "" {
 			role = "editor"
 		}
 	}
@@ -138,13 +135,13 @@ func RequireAuth(secret string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tokenStr := ExtractToken(r)
 		if tokenStr == "" {
-			http.Error(w, `{"error":"unauthorized: authentication required"}`, http.StatusUnauthorized)
+			writeAuthError(w, http.StatusUnauthorized, "Sign in to continue.")
 			return
 		}
 
 		claims, err := ParseToken(tokenStr, secret)
 		if err != nil {
-			http.Error(w, `{"error":"unauthorized: invalid or expired session"}`, http.StatusUnauthorized)
+			writeAuthError(w, http.StatusUnauthorized, "Your session has expired. Sign in again.")
 			return
 		}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/httputil"
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
@@ -16,6 +17,24 @@ import (
 
 type ArticleHandler struct {
 	service services.ArticleService
+	// isAdmin tells whether a request carries an admin session. Without it, every caller is
+	// treated as the public and only ever sees published stories.
+	isAdmin func(*http.Request) bool
+}
+
+// WithAdminCheck sets how the handler recognises an admin, so drafts stay hidden from everyone else.
+func (h *ArticleHandler) WithAdminCheck(f func(*http.Request) bool) *ArticleHandler {
+	h.isAdmin = f
+	return h
+}
+
+func (h *ArticleHandler) admin(r *http.Request) bool {
+	return h.isAdmin != nil && h.isAdmin(r)
+}
+
+// visibleToPublic is true for a story a reader may see: live, and not scheduled for later.
+func visibleToPublic(a *models.Article) bool {
+	return a != nil && a.Status == models.StatusPublished && !a.PublishedAt.After(time.Now())
 }
 
 // NewArticleHandler constructs an ArticleHandler from store and storage for backwards compatibility.
@@ -44,7 +63,7 @@ func (h *ArticleHandler) NormalizeMediaKeys(art *models.Article) {
 
 func (h *ArticleHandler) GetFeatured(w http.ResponseWriter, r *http.Request) {
 	featured, err := h.service.GetFeatured(r.Context())
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, store.ErrNotFound) || (err == nil && !h.admin(r) && !visibleToPublic(featured)) {
 		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "No featured article found")
 		return
 	}
@@ -122,11 +141,30 @@ func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	}
 	idsParam := r.URL.Query().Get("ids")
 	page := httputil.ParsePage(r, 20, 100)
+	// The public only ever gets live stories, whatever status they ask for.
+	isAdmin := h.admin(r)
+	if !isAdmin {
+		status = "published"
+	}
 
 	articles, total, err := h.service.ListArticlesPage(r.Context(), status, query, idsParam, page.Size, page.Offset)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch articles")
 		return
+	}
+
+	if !isAdmin {
+		// Lookups by id or search text do not filter by status, so drop anything not live.
+		live := articles[:0]
+		for i := range articles {
+			if visibleToPublic(&articles[i]) {
+				live = append(live, articles[i])
+			}
+		}
+		if len(live) != len(articles) {
+			total -= len(articles) - len(live)
+		}
+		articles = live
 	}
 
 	httputil.SetPageHeaders(w, total, page)
@@ -180,6 +218,11 @@ func (h *ArticleHandler) GetArticle(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch article")
+		return
+	}
+	// A draft or scheduled story does not exist as far as the public is concerned.
+	if !h.admin(r) && !visibleToPublic(art) {
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Article not found")
 		return
 	}
 

@@ -18,6 +18,7 @@ type AuthHandler struct {
 	userStore store.UserStore
 	jwtSecret string
 	supabase  config.SupabaseConfig
+	limiter   *loginLimiter
 }
 
 func NewAuthHandler(u store.UserStore, jwtSecret string, supabase config.SupabaseConfig) *AuthHandler {
@@ -25,6 +26,7 @@ func NewAuthHandler(u store.UserStore, jwtSecret string, supabase config.Supabas
 		userStore: u,
 		jwtSecret: jwtSecret,
 		supabase:  supabase,
+		limiter:   newLoginLimiter(8, 15*time.Minute),
 	}
 }
 
@@ -57,11 +59,23 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	emailKey, ipKey := "email:"+email, "ip:"+clientIP(r)
+	if h.limiter.blocked(emailKey, ipKey) {
+		w.Header().Set("Retry-After", "900")
+		http.Error(w, `{"error":"Too many sign-in attempts. Wait 15 minutes and try again."}`, http.StatusTooManyRequests)
+		return
+	}
+
 	isSecure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 
 	// 1. Authenticate against Supabase Auth if configured
 	if h.supabase.URL != "" && (h.supabase.PublishableKey != "" || h.supabase.SecretKey != "") {
 		if sbResp, err := h.loginWithSupabase(r.Context(), email, req.Password); err == nil {
+			if sbResp.User.Role != auth.RoleAdmin {
+				http.Error(w, `{"error":"This account does not have admin access."}`, http.StatusForbidden)
+				return
+			}
+			h.limiter.clear(emailKey)
 			http.SetCookie(w, &http.Cookie{
 				Name:     "cherryl_token",
 				Value:    sbResp.Token,
@@ -81,17 +95,30 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// 2. Fallback to local user store
 	user, hash, err := h.userStore.GetUserByEmail(r.Context(), email)
 	if err != nil {
-		http.Error(w, `{"error":"invalid email or password"}`, http.StatusUnauthorized)
+		h.limiter.fail(emailKey, ipKey)
+		http.Error(w, `{"error":"Wrong email or password."}`, http.StatusUnauthorized)
 		return
 	}
 
 	if !auth.CheckPassword(hash, req.Password) {
-		http.Error(w, `{"error":"invalid email or password"}`, http.StatusUnauthorized)
+		h.limiter.fail(emailKey, ipKey)
+		http.Error(w, `{"error":"Wrong email or password."}`, http.StatusUnauthorized)
 		return
 	}
+	h.limiter.clear(emailKey)
 
 	if !user.Active {
 		http.Error(w, `{"error":"user account is deactivated"}`, http.StatusForbidden)
+		return
+	}
+
+	if user.Role != auth.RoleAdmin {
+		http.Error(w, `{"error":"This account does not have admin access."}`, http.StatusForbidden)
+		return
+	}
+
+	if h.jwtSecret == "" {
+		http.Error(w, `{"error":"Sign-in is not set up on the server yet (JWT_SECRET is missing)."}`, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -225,10 +252,9 @@ func (h *AuthHandler) loginWithSupabase(ctx context.Context, email, password str
 	if fn, ok := tokenResp.User.UserMetadata["full_name"].(string); ok && fn != "" {
 		fullName = fn
 	}
-	role := "admin"
+	// Only app_metadata counts: the person can edit user_metadata themselves.
+	role := "editor"
 	if r, ok := tokenResp.User.AppMetadata["role"].(string); ok && r != "" {
-		role = r
-	} else if r, ok := tokenResp.User.UserMetadata["role"].(string); ok && r != "" {
 		role = r
 	}
 
