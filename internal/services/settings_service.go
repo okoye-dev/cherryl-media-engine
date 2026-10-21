@@ -45,6 +45,10 @@ func (s *settingsService) GetEditorialCopy(ctx context.Context) (models.Editoria
 		return copy, nil
 	}
 	val, err := s.store.GetSetting(ctx, editorialCopyKey)
+	if errors.Is(err, store.ErrNotFound) {
+		// Nothing has been saved yet, so the defaults are the current copy.
+		return copy, nil
+	}
 	if err != nil {
 		return copy, err
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
+	"github.com/okoye-dev/cherryl-media-engine/internal/services"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
 )
 
@@ -88,5 +89,16 @@ func TestLoginLimiter(t *testing.T) {
 	l.clear("email:a")
 	if l.blocked("email:a") {
 		t.Error("clearing should unblock")
+	}
+}
+
+func TestPatchEditorialCopyWorksBeforeAnythingWasSaved(t *testing.T) {
+	mem := store.NewMemoryStore()
+	h := NewSettingsHandlerWithService(services.NewSettingsService(mem))
+	req := httptest.NewRequest(http.MethodPatch, "/api/settings/editorial-copy", strings.NewReader(`{"hero":{"editionBadge":"NEW BADGE"}}`))
+	w := httptest.NewRecorder()
+	h.PatchEditorialCopy(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "NEW BADGE") {
+		t.Fatalf("want 200 with the new badge, got %d: %s", w.Code, w.Body.String())
 	}
 }
