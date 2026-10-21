@@ -13,7 +13,6 @@ import (
 	"github.com/okoye-dev/cherryl-media-engine/internal/config"
 	"github.com/okoye-dev/cherryl-media-engine/internal/handlers"
 	"github.com/okoye-dev/cherryl-media-engine/internal/migrate"
-	"github.com/okoye-dev/cherryl-media-engine/internal/seed"
 	"github.com/okoye-dev/cherryl-media-engine/internal/services"
 	"github.com/okoye-dev/cherryl-media-engine/internal/storage"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
@@ -108,11 +107,6 @@ func main() {
 		settingsStore = pg
 		sectionStore = pg
 		subscriberStore = pg
-
-		// Seed PostgreSQL with canonical articles and default admin if not already present
-		if err := seed.Run(ctx, pg); err != nil {
-			log.Printf("initial database seeding warning: %v", err)
-		}
 	} else {
 		mem := store.NewMemoryStore()
 		articleStore = mem
@@ -121,11 +115,6 @@ func main() {
 		settingsStore = mem
 		sectionStore = mem
 		subscriberStore = mem
-
-		// Seed Memory store
-		if err := seed.Run(context.Background(), mem); err != nil {
-			log.Printf("initial memory seeding warning: %v", err)
-		}
 	}
 
 	// Initialize Auth Verifier (supports local HMAC and Supabase ECC JWKS)

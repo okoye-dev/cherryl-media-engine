@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/models"
-	"github.com/okoye-dev/cherryl-media-engine/internal/seed"
 	"github.com/okoye-dev/cherryl-media-engine/internal/store"
+	"github.com/okoye-dev/cherryl-media-engine/internal/testfixtures"
 )
 
 func setupTestStore(t *testing.T) (*store.MemoryStore, *ArticleHandler, *SectionsHandler) {
@@ -18,7 +18,7 @@ func setupTestStore(t *testing.T) (*store.MemoryStore, *ArticleHandler, *Section
 	ctx := context.Background()
 
 	// Seed articles into memory store
-	for _, art := range seed.GetAllWebsiteArticles() {
+	for _, art := range testfixtures.GetAllWebsiteArticles() {
 		a := art
 		if err := mem.Save(ctx, &a); err != nil {
 			t.Fatalf("failed to save seed article: %v", err)
