@@ -28,8 +28,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("nigerian-current-affairs"),
 			CategoryName: "Current Affairs",
 			Author: models.Author{
-				Name: "Tunde Oladipo",
-				Role: "Senior Policy Correspondent",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/e826f4da-b7b7-5120-bb2b-f466b33a929c.webp",
@@ -40,19 +40,18 @@ func GetAllWebsiteArticles() []models.Article {
 			ReadTime: "4 min read",
 			Status:   models.StatusPublished,
 			IsLead:   true,
-			Urgent:   true,
 			Tags:     []string{"FEC", "Energy", "Power", "Decentralization", "Policy", "Infrastructure"},
 			Excerpt:  "The Federal Executive Council has ratified an inter-ministerial policy framework aimed at overhauling state-level power generation and establishing sub-national regulatory corridors.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "The Federal Executive Council has ratified an inter-ministerial policy framework aimed at overhauling state-level power generation and establishing sub-national regulatory corridors. Under the resolution finalized yesterday in Abuja, commercial developers will gain direct access to regional distribution networks without prior federal concession bottlenecks.",
+					Text:      "The Federal Executive Council has ratified an inter-ministerial policy framework aimed at overhauling state-level power generation and establishing sub-national regulatory corridors. Under the resolution finalized yesterday in Abuja, commercial developers will gain direct access to regional distribution networks without prior federal concession bottlenecks.",
 				},
 				{
-					Type: "quote",
-					Quote: "Our objective is to allow state governments and private capital to build dedicated industrial feeder lines without navigating redundant bureaucratic layers.",
-					Author: "Chief Adebayo Adelabu",
+					Type:    "quote",
+					Quote:   "Our objective is to allow state governments and private capital to build dedicated industrial feeder lines without navigating redundant bureaucratic layers.",
+					Author:  "Chief Adebayo Adelabu",
 					Context: "Minister of Power",
 				},
 				{
@@ -60,16 +59,16 @@ func GetAllWebsiteArticles() []models.Article {
 					Text: "Under the provisions of the 2023 Electricity Act now reaching full operational maturation, eight states have officially completed the transfer of regulatory oversight from the Nigerian Electricity Regulatory Commission (NERC) to state electricity regulatory boards. This decentralized posture is already triggering private liquidity inflows into localized gas-to-power and solar hybrid hubs across Ogun, Oyo, and Kano corridors.",
 				},
 				{
-					Type: "image",
-					Src: "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/ece0db31-b6f8-5eaf-9278-c901b46acfee.webp",
+					Type:       "image",
+					Src:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/ece0db31-b6f8-5eaf-9278-c901b46acfee.webp",
 					StorageKey: "media/ece0db31-b6f8-5eaf-9278-c901b46acfee.webp",
-					Caption: "Regional mini-grid substation installation in Ogun State industrial corridor.",
-					Credit: "Photo: Cherryl Media Field Archive",
-					Alt: "Mini-grid solar distribution substation",
+					Caption:    "Regional mini-grid substation installation in Ogun State industrial corridor.",
+					Credit:     "Photo: Cherryl Media Field Archive",
+					Alt:        "Mini-grid solar distribution substation",
 				},
 				{
-					Type: "heading",
-					Text: "Fiscal Provisions and State Feeder Guarantees",
+					Type:  "heading",
+					Text:  "Fiscal Provisions and State Feeder Guarantees",
 					Level: 2,
 				},
 				{
@@ -77,11 +76,11 @@ func GetAllWebsiteArticles() []models.Article {
 					Text: "Crucially, the new framework mandates that distribution companies (DisCos) ring-fence industrial consumers on Band A feeders, ensuring that tariff pricing directly correlates with measured, metered uptime. Violations will trigger automated billing credits back to end consumers through unified metering software.",
 				},
 				{
-					Type: "internal_link",
-					Title: "NERC Releases Reclassified State Feeder Bands and Consumer Metering Schedule",
-					Slug: "nigeria-electricity-regulatory-commission-updates-feeder-bands",
+					Type:     "internal_link",
+					Title:    "NERC Releases Reclassified State Feeder Bands and Consumer Metering Schedule",
+					Slug:     "nigeria-electricity-regulatory-commission-updates-feeder-bands",
 					Category: "Practical Updates",
-					Deck: "Official public-service advisory detailing guaranteed supply hours, revised band thresholds, and direct customer dispute mechanisms.",
+					Deck:     "Official public-service advisory detailing guaranteed supply hours, revised band thresholds, and direct customer dispute mechanisms.",
 					ReadTime: "3 min read",
 				},
 				{
@@ -89,9 +88,9 @@ func GetAllWebsiteArticles() []models.Article {
 					Text: "Economic observers note that while currency fluctuations continue to impact imported turbine equipment, long-term bilateral guarantees provided by sovereign infrastructure funds have mitigated immediate financing risk.",
 				},
 				{
-					Type: "external_link",
-					Title: "Federal Ministry of Power: Official Gazette on State Energy Decentralization",
-					URL: "https://nerc.gov.ng",
+					Type:      "external_link",
+					Title:     "Federal Ministry of Power: Official Gazette on State Energy Decentralization",
+					URL:       "https://nerc.gov.ng",
 					Publisher: "NERC Regulatory Portal",
 				},
 			},
@@ -129,8 +128,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("practical-nigerian-updates"),
 			CategoryName: "Practical Updates",
 			Author: models.Author{
-				Name: "Bisi Alabi",
-				Role: "Public Service & Utility Reporter",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/f5aa1481-2d88-5159-9d90-91676df84733.webp",
@@ -144,13 +143,13 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "The Nigerian Electricity Regulatory Commission has issued an updated national schedule for consumer feeder bands, clarifying minimum daily service thresholds across all eleven distribution franchises.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "The Nigerian Electricity Regulatory Commission has issued an updated national schedule for consumer feeder bands, clarifying minimum daily service thresholds and enforcement channels across all eleven electricity distribution franchises.",
+					Text:      "The Nigerian Electricity Regulatory Commission has issued an updated national schedule for consumer feeder bands, clarifying minimum daily service thresholds and enforcement channels across all eleven electricity distribution franchises.",
 				},
 				{
-					Type: "heading",
-					Text: "Guaranteed Supply Hours by Feeder Classification",
+					Type:  "heading",
+					Text:  "Guaranteed Supply Hours by Feeder Classification",
 					Level: 2,
 				},
 				{
@@ -186,8 +185,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("entertainment-internet-culture"),
 			CategoryName: "Entertainment & Internet Culture",
 			Author: models.Author{
-				Name: "Funke Balogun",
-				Role: "Culture Bureau Chief",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/fff4d6db-84bb-523d-ae18-2d8451490929.webp",
@@ -201,23 +200,23 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "How independent Nigerian showrunners, cinematographers, and production executives bypassed legacy syndication bottlenecks to build sovereign intellectual property empires.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "In a cavernous soundstage off the Lekki-Epe corridor, a seventy-person crew works under silent LED rigs. Thirty years ago, their predecessors wrapped feature films in forty-eight hours on Hi8 videotape sold out of roadside stalls in Idumota.",
+					Text:      "In a cavernous soundstage off the Lekki-Epe corridor, a seventy-person crew works under silent LED rigs. Thirty years ago, their predecessors wrapped feature films in forty-eight hours on Hi8 videotape sold out of roadside stalls in Idumota.",
 				},
 				{
-					Type: "quote",
-					Quote: "We stopped negotiating for shelf space. We engineered the audience first, and then the global streamers had no choice but to come to Lagos.",
-					Author: "Kemi Adesanya",
+					Type:    "quote",
+					Quote:   "We stopped negotiating for shelf space. We engineered the audience first, and then the global streamers had no choice but to come to Lagos.",
+					Author:  "Kemi Adesanya",
 					Context: "Showrunner & Producer",
 				},
 				{
-					Type: "image",
-					Src: "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/3d6b3a23-ffaf-5df6-82db-f51fa5077518.webp",
+					Type:       "image",
+					Src:        "https://pub-ceebfc5378214f48bb3d7ec7b50b0901.r2.dev/media/3d6b3a23-ffaf-5df6-82db-f51fa5077518.webp",
 					StorageKey: "media/3d6b3a23-ffaf-5df6-82db-f51fa5077518.webp",
-					Caption: "Audience premiere at a contemporary West African cinema festival.",
-					Credit: "Photo: Film Guild Archives",
-					Alt: "Cinema festival audience premiere",
+					Caption:    "Audience premiere at a contemporary West African cinema festival.",
+					Credit:     "Photo: Film Guild Archives",
+					Alt:        "Cinema festival audience premiere",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -259,14 +258,13 @@ func GetAllWebsiteArticles() []models.Article {
 			},
 			ReadTime: "5 min read",
 			Status:   models.StatusPublished,
-			Urgent:   true,
 			Tags:     []string{"CBN", "Banking", "Fintech", "PAPSS", "Foreign Exchange", "Trade"},
 			Excerpt:  "The Central Bank of Nigeria has finalized technical protocols linking domestic instant payment switches with regional settlement corridors across West Africa.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "The Central Bank of Nigeria has concluded multilateral integration protocols linking domestic instant payment switches with the Pan-African Payment and Settlement System (PAPSS).",
+					Text:      "The Central Bank of Nigeria has concluded multilateral integration protocols linking domestic instant payment switches with the Pan-African Payment and Settlement System (PAPSS).",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -297,8 +295,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("stories-romance"),
 			CategoryName: "Stories & Romance",
 			Author: models.Author{
-				Name: "Amara Okonkwo",
-				Role: "Special Features Columnist",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/99f72c5d-6c90-5d7e-a61d-2928952e13e7.webp",
@@ -312,9 +310,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "At 6:45 PM on a Tuesday, Third Mainland Bridge ceases to be a concrete thoroughfare and becomes a collective holding space for eight million unresolved thoughts.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "At 6:45 PM on a Tuesday, Third Mainland Bridge ceases to be an eleven-kilometer concrete artery and becomes a collective holding chamber for eight million private longings.",
+					Text:      "At 6:45 PM on a Tuesday, Third Mainland Bridge ceases to be an eleven-kilometer concrete artery and becomes a collective holding chamber for eight million private longings.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -345,8 +343,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("nigerian-current-affairs"),
 			CategoryName: "Current Affairs",
 			Author: models.Author{
-				Name: "Tunde Oladipo",
-				Role: "Senior Policy Correspondent",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/bc51d838-573d-5947-9372-ac03075b98e8.webp",
@@ -356,14 +354,13 @@ func GetAllWebsiteArticles() []models.Article {
 			},
 			ReadTime: "3 min read",
 			Status:   models.StatusPublished,
-			Urgent:   true,
 			Tags:     []string{"Rail", "Transport", "Infrastructure", "Safety", "Federal Government"},
 			Excerpt:  "The Federal Ministry of Transport has ordered an immediate technical assessment of passenger safety systems across operational rail routes.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "The Federal Ministry of Transport has ordered an immediate technical assessment of signaling infrastructure across standard-gauge passenger corridors.",
+					Text:      "The Federal Ministry of Transport has ordered an immediate technical assessment of signaling infrastructure across standard-gauge passenger corridors.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -394,8 +391,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("practical-nigerian-updates"),
 			CategoryName: "Practical Updates",
 			Author: models.Author{
-				Name: "Bisi Alabi",
-				Role: "Public Service & Utility Reporter",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/4958ea81-ae31-51f0-a893-74090ea4b453.webp",
@@ -409,9 +406,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "Distribution companies have published the phase 2 execution plan for prepaid meter TID rollover and firmware upgrades across all 36 states.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "Electricity distribution companies across Nigeria have published detailed schedules for the mandatory smart meter firmware migration.",
+					Text:      "Electricity distribution companies across Nigeria have published detailed schedules for the mandatory smart meter firmware migration.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -442,8 +439,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("business-institutions"),
 			CategoryName: "Business & Institutions",
 			Author: models.Author{
-				Name: "Chukwudi Nwosu",
-				Role: "Capital Markets Analyst",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/d44aee35-6b1f-5212-bc28-f78f1f061864.webp",
@@ -457,9 +454,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "A syndicate of leading Nigerian tier-one financial institutions has created a dedicated domestic trade credit facility to support non-oil exporters.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "A consortium of commercial lenders has formalized a 500-billion-naira credit facility targeted at non-oil exporters and local industrial fabricators.",
+					Text:      "A consortium of commercial lenders has formalized a 500-billion-naira credit facility targeted at non-oil exporters and local industrial fabricators.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -490,8 +487,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("stories-romance"),
 			CategoryName: "Stories & Romance",
 			Author: models.Author{
-				Name: "Amara Okonkwo",
-				Role: "Special Features Columnist",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/21b50b9b-85ec-5dae-9116-ebade33a41e8.webp",
@@ -505,9 +502,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "We spent three hours talking over iced coffee at a corner table on Awolowo Road, pretending the rain outside was the only reason we hadn't called a cab.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "We spent three hours talking over iced coffee at a corner table on Awolowo Road, pretending the heavy October downpour outside was the only reason we hadn't called a ride home.",
+					Text:      "We spent three hours talking over iced coffee at a corner table on Awolowo Road, pretending the heavy October downpour outside was the only reason we hadn't called a ride home.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -538,8 +535,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("entertainment-internet-culture"),
 			CategoryName: "Entertainment & Internet Culture",
 			Author: models.Author{
-				Name: "Funke Balogun",
-				Role: "Culture Bureau Chief",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/68d885ad-623f-5769-b9ea-6deb64c1b762.webp",
@@ -553,9 +550,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "Behind heavy soundproof doors in Surulere, a new wave of sound architects is blending traditional Yoruba talking drums with modular analog synthesizers.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "Behind heavy soundproof doors in Surulere and Ebute Metta, a new wave of electronic composers is blending centuries-old polyrhythms with vintage Japanese analog synthesizers.",
+					Text:      "Behind heavy soundproof doors in Surulere and Ebute Metta, a new wave of electronic composers is blending centuries-old polyrhythms with vintage Japanese analog synthesizers.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -581,13 +578,13 @@ func GetAllWebsiteArticles() []models.Article {
 			ID:           deterministicUUID("fermentation-coastal-smoke-heritage-indigenous-grains"),
 			Slug:         "fermentation-coastal-smoke-heritage-indigenous-grains",
 			Title:        "Fermentation, Coastal Smoke & Heritage: The Contemporary Revival of Indigenous Grains",
-			Kicker:       "GASTRONOMY & BOTANY",
+			Kicker:       "ENTERTAINMENT & LIFESTYLE",
 			Deck:         "Culinary anthropologists and contemporary chefs recharting regional biodiversity across coastal markets and ancestral fermentation pits.",
 			Category:     models.PillarCategory("entertainment-internet-culture"),
 			CategoryName: "Entertainment & Internet Culture",
 			Author: models.Author{
-				Name: "Funke Balogun",
-				Role: "Culture Bureau Chief",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/a3bd1c2d-ca6a-5a2c-900d-75461a3a4078.webp",
@@ -601,9 +598,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "Culinary anthropologists and contemporary chefs recharting regional biodiversity across coastal markets.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "Across test kitchens in Victoria Island and traditional earth kitchens along the Badagry coastline, a quiet culinary revolution is reclaiming fonio, heirloom millet, and fermented locust beans from culinary marginality.",
+					Text:      "Across test kitchens in Victoria Island and traditional earth kitchens along the Badagry coastline, a quiet culinary revolution is reclaiming fonio, heirloom millet, and fermented locust beans from culinary marginality.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -634,8 +631,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("entertainment-internet-culture"),
 			CategoryName: "Entertainment & Internet Culture",
 			Author: models.Author{
-				Name: "Funke Balogun",
-				Role: "Culture Bureau Chief",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/a439611c-2737-5bf1-8b0b-c5933ceee3e3.webp",
@@ -649,9 +646,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "West Africa's flagship art fair confirms the participation of leading contemporary spaces across Africa and the global diaspora.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "Art X Lagos has finalized its curated exhibitor roster for the upcoming 2026 edition, welcoming forty-two galleries from twenty-six nations.",
+					Text:      "Art X Lagos has finalized its curated exhibitor roster for the upcoming 2026 edition, welcoming forty-two galleries from twenty-six nations.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -682,8 +679,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("entertainment-internet-culture"),
 			CategoryName: "Entertainment & Internet Culture",
 			Author: models.Author{
-				Name: "Funke Balogun",
-				Role: "Culture Bureau Chief",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/c378c8dc-0c2f-5281-ae2e-8f920bde290d.webp",
@@ -697,9 +694,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "Audio restoration engineers in Accra and Lagos are racing to convert fragile shellac and vinyl recordings into lossless digital masters.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "In an air-conditioned laboratory in central Accra, audio engineer Kofi Mensah uses optical laser turntables to clean and digitize fragile 1960s highlife records.",
+					Text:      "In an air-conditioned laboratory in central Accra, audio engineer Kofi Mensah uses optical laser turntables to clean and digitize fragile 1960s highlife records.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -730,8 +727,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("nigerian-current-affairs"),
 			CategoryName: "Current Affairs",
 			Author: models.Author{
-				Name: "Tunde Oladipo",
-				Role: "Senior Policy Correspondent",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/fa264975-1c61-5ce2-8f5b-ce07127defe5.webp",
@@ -745,9 +742,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "New civic and community facilities built with compressed earth masonry achieve 8-degree Celsius indoor temperature reductions naturally.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "Architects across Kaduna, Kano, and Niamey are demonstrating how centuries-old Sahelian earthen masonry and thermal mass principles can solve modern energy crises.",
+					Text:      "Architects across Kaduna, Kano, and Niamey are demonstrating how centuries-old Sahelian earthen masonry and thermal mass principles can solve modern energy crises.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -778,8 +775,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("entertainment-internet-culture"),
 			CategoryName: "Entertainment & Internet Culture",
 			Author: models.Author{
-				Name: "Funke Balogun",
-				Role: "Culture Bureau Chief",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/64185597-9d0e-55ba-b4fc-d997c55868ad.webp",
@@ -793,9 +790,9 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "Independent graphic novelists are crafting richly illustrated serialized adventures steeped in Yoruba, Igbo, and Hausa mythology.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "In print shops across Somolu, young graphic novelists and colorists are producing limited-edition serialized comic books that reimagine ancient folklore for digital natives.",
+					Text:      "In print shops across Somolu, young graphic novelists and colorists are producing limited-edition serialized comic books that reimagine ancient folklore for digital natives.",
 				},
 			},
 			Sources: []models.SourceCitation{
@@ -826,8 +823,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("nigerian-current-affairs"),
 			CategoryName: "Current Affairs",
 			Author: models.Author{
-				Name: "Amina Bello",
-				Role: "Environment & Policy Desk",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/1b8e4f20-9111-5333-8222-777788889999.webp",
@@ -841,14 +838,14 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "The National Climate Council has finalized disbursement modalities for subnational ecological defense funds, pairing sovereign capital with international matching grants.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "The National Climate Council has commenced disbursement of the initial tranche of sovereign ecological adaptation grants to sixteen vulnerable coastal and riverine states. Under the matching framework ratified during the inter-ministerial climate summit in Abuja, recipient states will direct liquidity toward concrete embankment construction, watershed stabilization, and automated early flood warning telemetry.",
+					Text:      "The National Climate Council has commenced disbursement of the initial tranche of sovereign ecological adaptation grants to sixteen vulnerable coastal and riverine states. Under the matching framework ratified during the inter-ministerial climate summit in Abuja, recipient states will direct liquidity toward concrete embankment construction, watershed stabilization, and automated early flood warning telemetry.",
 				},
 				{
-					Type: "quote",
-					Quote: "Resilience capital is no longer theoretical. Subnational governments now possess direct financing corridors to protect vulnerable agricultural and municipal belts before the peak seasonal rainfall.",
-					Author: "Dr. Salisu Dahiru",
+					Type:    "quote",
+					Quote:   "Resilience capital is no longer theoretical. Subnational governments now possess direct financing corridors to protect vulnerable agricultural and municipal belts before the peak seasonal rainfall.",
+					Author:  "Dr. Salisu Dahiru",
 					Context: "Director-General, National Council on Climate Change",
 				},
 				{
@@ -884,8 +881,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("practical-nigerian-updates"),
 			CategoryName: "Practical Updates",
 			Author: models.Author{
-				Name: "Chuka Obi",
-				Role: "Public Service Correspondent",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/2c9f5a31-9222-5444-8333-888899990000.webp",
@@ -899,14 +896,14 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "Commercial motor park operators across all 36 states now face nationwide compliance checks on digital passenger manifests under newly gazetted safety regulations.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "The Federal Road Safety Corps (FRSC) has announced full enforcement timelines for the National Digital Passenger Manifest System (NDPMS), mandating commercial fleet operators to discard manual paper logs in favor of encrypted cloud manifests.",
+					Text:      "The Federal Road Safety Corps (FRSC) has announced full enforcement timelines for the National Digital Passenger Manifest System (NDPMS), mandating commercial fleet operators to discard manual paper logs in favor of encrypted cloud manifests.",
 				},
 				{
-					Type: "quote",
-					Quote: "In the event of an emergency on federal highways, immediate digital identification and verified next-of-kin notification are essential legal rights for every commuter.",
-					Author: "Shehu Mohammed",
+					Type:    "quote",
+					Quote:   "In the event of an emergency on federal highways, immediate digital identification and verified next-of-kin notification are essential legal rights for every commuter.",
+					Author:  "Shehu Mohammed",
 					Context: "Corps Marshal, FRSC",
 				},
 				{
@@ -942,8 +939,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("practical-nigerian-updates"),
 			CategoryName: "Practical Updates",
 			Author: models.Author{
-				Name: "Tunde Oladipo",
-				Role: "Senior Policy Correspondent",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/3d0a6b42-9333-5555-8444-999900001111.webp",
@@ -957,14 +954,14 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "SON has unveiled tightened anti-counterfeiting benchmarks for renewable energy hardware to curb substandard battery imports and safeguard residential consumers.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "The Standards Organisation of Nigeria (SON) has directed all solar component distributors and importers to apply mandatory QR verification seals on inverters, battery management systems, and monocrystalline solar modules.",
+					Text:      "The Standards Organisation of Nigeria (SON) has directed all solar component distributors and importers to apply mandatory QR verification seals on inverters, battery management systems, and monocrystalline solar modules.",
 				},
 				{
-					Type: "quote",
-					Quote: "Nigerian households investing their hard-earned money in clean off-grid energy deserve genuine, tested components with verifiable warranty backing.",
-					Author: "Dr. Ifeanyi Okeke",
+					Type:    "quote",
+					Quote:   "Nigerian households investing their hard-earned money in clean off-grid energy deserve genuine, tested components with verifiable warranty backing.",
+					Author:  "Dr. Ifeanyi Okeke",
 					Context: "Director-General, Standards Organisation of Nigeria",
 				},
 				{
@@ -1000,8 +997,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("business-institutions"),
 			CategoryName: "Business & Institutions",
 			Author: models.Author{
-				Name: "Emeka Nnamani",
-				Role: "Financial Markets Editor",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/4e1b7c53-9444-5666-8555-000011112222.webp",
@@ -1015,14 +1012,14 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "Commercial real estate developers in Lagos and Abuja are securitizing warehouse and logistics footprints into high-performing investment trusts trading on the Nigerian Exchange.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "Institutional asset managers and pension fund administrators have committed over $450 million in newly structured Real Estate Investment Trusts (REITs) listed on the Nigerian Exchange, signaling renewed appetite for tangible commercial yield.",
+					Text:      "Institutional asset managers and pension fund administrators have committed over $450 million in newly structured Real Estate Investment Trusts (REITs) listed on the Nigerian Exchange, signaling renewed appetite for tangible commercial yield.",
 				},
 				{
-					Type: "quote",
-					Quote: "REIT securitization unlocks locked-up corporate balance sheet value while providing institutional funds with robust rental yields indexed to economic productivity.",
-					Author: "Temi Popoola",
+					Type:    "quote",
+					Quote:   "REIT securitization unlocks locked-up corporate balance sheet value while providing institutional funds with robust rental yields indexed to economic productivity.",
+					Author:  "Temi Popoola",
 					Context: "Group CEO, Nigerian Exchange Group",
 				},
 				{
@@ -1058,8 +1055,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("business-institutions"),
 			CategoryName: "Business & Institutions",
 			Author: models.Author{
-				Name: "Emeka Nnamani",
-				Role: "Financial Markets Editor",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/5f2c8d64-9555-5777-8666-111122223333.webp",
@@ -1073,14 +1070,14 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "PenCom's updated operational framework simplifies the process for retirement savings account holders to access up to a quarter of their balance for residential down payments.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "The National Pension Commission (PenCom) has streamlined regulatory prerequisites for RSA contributors seeking to utilize up to 25 percent of their accumulated pension balance as equity contribution for residential mortgage loans.",
+					Text:      "The National Pension Commission (PenCom) has streamlined regulatory prerequisites for RSA contributors seeking to utilize up to 25 percent of their accumulated pension balance as equity contribution for residential mortgage loans.",
 				},
 				{
-					Type: "quote",
-					Quote: "Housing security is a foundational pillar of retirement peace of mind. Allowing early equity access creates tangible lifetime wealth for contributors during their peak earning years.",
-					Author: "Omolola Oloworaran",
+					Type:    "quote",
+					Quote:   "Housing security is a foundational pillar of retirement peace of mind. Allowing early equity access creates tangible lifetime wealth for contributors during their peak earning years.",
+					Author:  "Omolola Oloworaran",
 					Context: "Director-General, PenCom",
 				},
 				{
@@ -1116,8 +1113,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("stories-romance"),
 			CategoryName: "Stories & Romance",
 			Author: models.Author{
-				Name: "Folashade Adeleke",
-				Role: "Senior Essayist",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/6a3d9e75-9666-5888-8777-222233334444.webp",
@@ -1131,18 +1128,18 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "A meditative exploration of long-distance courtship, FaceTime rituals, and the peculiar tenderness of building intimacy when oceans and time zones intervene.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "There is an unspoken geometry to loving someone who wakes up when you are preparing for bed. It begins with the instinctive calculation of hours—subtract one in winter, add five when summer daylight savings shift—and settles into a quiet cadence of whispered voice notes sent between tube stations and generator hums.",
+					Text:      "There is an unspoken geometry to loving someone who wakes up when you are preparing for bed. It begins with the instinctive calculation of hours—subtract one in winter, add five when summer daylight savings shift—and settles into a quiet cadence of whispered voice notes sent between tube stations and generator hums.",
 				},
 				{
 					Type: "paragraph",
 					Text: "For tens of thousands of young Nigerians who relocated in recent years, intimacy has transformed from shared evening meals in Ikeja into shared screen time, virtual cooking sessions, and the fragile vulnerability of transatlantic phone calls.",
 				},
 				{
-					Type: "quote",
-					Quote: "Distance doesn't diminish affection; it magnifies intention. Every minute of attention across oceans must be deliberately chosen.",
-					Author: "Bisi Akintola",
+					Type:    "quote",
+					Quote:   "Distance doesn't diminish affection; it magnifies intention. Every minute of attention across oceans must be deliberately chosen.",
+					Author:  "Bisi Akintola",
 					Context: "Writer & Cultural Anthropologist",
 				},
 			},
@@ -1174,8 +1171,8 @@ func GetAllWebsiteArticles() []models.Article {
 			Category:     models.PillarCategory("stories-romance"),
 			CategoryName: "Stories & Romance",
 			Author: models.Author{
-				Name: "Folashade Adeleke",
-				Role: "Senior Essayist",
+				Name: "",
+				Role: "",
 			},
 			FeaturedImage: models.FeaturedImage{
 				StorageKey: "media/7b4e0f86-9777-5999-8888-333344445555.webp",
@@ -1189,14 +1186,14 @@ func GetAllWebsiteArticles() []models.Article {
 			Excerpt:  "A warm, witty chronicle of how Lagos traffic jams—ordinarily a source of collective exasperation—became the stage for one couple's serendipitous beginnings.",
 			Body: []models.ContentBlock{
 				{
-					Type: "paragraph",
+					Type:      "paragraph",
 					IsDropCap: true,
-					Text: "In Lagos, the highway is rarely romantic. At 6:45 PM on a rainy Thursday near Chevron tollgate, it is typically a symphony of horns, brake lights, and roasted plantain vendors dodging side mirrors. Yet that evening, when two Japanese sedans suffered identical overheated radiators within ten feet of each other on the shoulder, circumstance engineered a meeting that neither dating apps nor dinner parties could have arranged.",
+					Text:      "In Lagos, the highway is rarely romantic. At 6:45 PM on a rainy Thursday near Chevron tollgate, it is typically a symphony of horns, brake lights, and roasted plantain vendors dodging side mirrors. Yet that evening, when two Japanese sedans suffered identical overheated radiators within ten feet of each other on the shoulder, circumstance engineered a meeting that neither dating apps nor dinner parties could have arranged.",
 				},
 				{
-					Type: "quote",
-					Quote: "If you can laugh together while pouring bottled water into a boiling car engine in the middle of Lagos traffic, you can survive almost anything together.",
-					Author: "Timi Balogun",
+					Type:    "quote",
+					Quote:   "If you can laugh together while pouring bottled water into a boiling car engine in the middle of Lagos traffic, you can survive almost anything together.",
+					Author:  "Timi Balogun",
 					Context: "Lekki Resident & Architect",
 				},
 				{
@@ -1221,6 +1218,5 @@ func GetAllWebsiteArticles() []models.Article {
 			PublishedAt: now,
 			CreatedAt:   now,
 		},
-
 	}
 }
