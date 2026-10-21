@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/okoye-dev/cherryl-media-engine/internal/httputil"
@@ -94,23 +93,27 @@ func (h *ArticleHandler) SetFeatured(w http.ResponseWriter, r *http.Request) {
 
 func (h *ArticleHandler) SearchCurated(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	category := q.Get("category")
-	query := q.Get("q")
-	sort := q.Get("sort")
-	limit, _ := strconv.Atoi(q.Get("limit"))
+	page := httputil.ParsePage(r, 30, 100)
 
-	results, err := h.service.SearchCuratedArticles(r.Context(), category, query, sort, limit)
+	results, total, err := h.service.SearchCuratedArticles(r.Context(), q.Get("category"), q.Get("q"), q.Get("sort"), page.Size, page.Offset)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "SEARCH_FAILED", err.Error())
 		return
 	}
 
+	httputil.SetPageHeaders(w, total, page)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"articles": results,
-		"count":    len(results),
+		"articles":   results,
+		"count":      len(results),
+		"total":      total,
+		"page":       page.Number,
+		"pageSize":   page.Size,
+		"totalPages": page.TotalPages(total),
 	})
 }
 
+// ListArticles returns one page of articles as a plain array. The page position is in the
+// X-Total-Count, X-Page, X-Page-Size and X-Total-Pages headers. Ask for ?page=2&pageSize=20.
 func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	query := r.URL.Query().Get("q")
@@ -118,19 +121,15 @@ func (h *ArticleHandler) ListArticles(w http.ResponseWriter, r *http.Request) {
 		query = r.URL.Query().Get("search")
 	}
 	idsParam := r.URL.Query().Get("ids")
-	limit := 20
-	if lStr := r.URL.Query().Get("limit"); lStr != "" {
-		if l, lErr := strconv.Atoi(lStr); lErr == nil && l > 0 {
-			limit = l
-		}
-	}
+	page := httputil.ParsePage(r, 20, 100)
 
-	articles, err := h.service.ListArticles(r.Context(), status, query, idsParam, limit)
+	articles, total, err := h.service.ListArticlesPage(r.Context(), status, query, idsParam, page.Size, page.Offset)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch articles")
 		return
 	}
 
+	httputil.SetPageHeaders(w, total, page)
 	httputil.WriteJSON(w, http.StatusOK, articles)
 }
 
@@ -211,12 +210,54 @@ func (h *ArticleHandler) SaveArticle(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// PatchArticle changes only the fields sent. The reply lists which fields really changed.
+func (h *ArticleHandler) PatchArticle(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_PARAM", "Article ID or slug is required")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
+	var patch map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil || len(patch) == 0 {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Send a JSON object with the fields to change")
+		return
+	}
+
+	saved, changed, err := h.service.PatchArticle(r.Context(), id, patch)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		httputil.WriteError(w, http.StatusNotFound, "NOT_FOUND", "Article not found")
+		return
+	case errors.Is(err, services.ErrPatchRejected):
+		httputil.WriteError(w, http.StatusBadRequest, "PATCH_REJECTED", err.Error())
+		return
+	case err != nil && strings.Contains(err.Error(), "cannot be empty"):
+		httputil.WriteError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
+		return
+	case err != nil:
+		httputil.WriteError(w, http.StatusInternalServerError, "SAVE_FAILED", "Failed to save article: "+err.Error())
+		return
+	}
+
+	if changed == nil {
+		changed = []string{}
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"article": saved,
+		"changed": changed,
+	})
+}
+
 func (h *ArticleHandler) ListCandidates(w http.ResponseWriter, r *http.Request) {
-	candidates, err := h.service.ListCandidates(r.Context())
+	page := httputil.ParsePage(r, 20, 100)
+	candidates, total, err := h.service.ListCandidatesPage(r.Context(), page.Size, page.Offset)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch candidates")
 		return
 	}
+	httputil.SetPageHeaders(w, total, page)
 	httputil.WriteJSON(w, http.StatusOK, candidates)
 }
 

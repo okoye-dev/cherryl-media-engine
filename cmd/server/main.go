@@ -53,7 +53,8 @@ func securityMiddleware(next http.Handler) http.Handler {
 		} else {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Total-Count, X-Page, X-Page-Size, X-Total-Pages")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Range")
 
 		// 3. Preflight fast response
@@ -163,6 +164,7 @@ func main() {
 	mux.HandleFunc("GET /api/articles", articleHandler.ListArticles)
 	mux.HandleFunc("GET /api/articles/", articleHandler.GetArticle)
 	mux.HandleFunc("POST /api/articles", articleHandler.SaveArticle)
+	mux.HandleFunc("PATCH /api/articles/{id}", articleHandler.PatchArticle)
 	mux.HandleFunc("POST /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("PUT /api/articles/{id}/publish", articleHandler.PublishArticle)
 	mux.HandleFunc("GET /api/links/resolve", articleHandler.ResolveLink)
@@ -183,6 +185,9 @@ func main() {
 	mux.HandleFunc("GET /api/settings", settingsHandler.GetSettings)
 	mux.HandleFunc("POST /api/settings", settingsHandler.UpdateSettings)
 	mux.HandleFunc("PUT /api/settings", settingsHandler.UpdateSettings)
+	mux.HandleFunc("PUT /api/settings/editorial-copy", settingsHandler.SaveEditorialCopy)
+	mux.HandleFunc("PATCH /api/settings/editorial-copy", settingsHandler.PatchEditorialCopy)
+	mux.HandleFunc("POST /api/settings/editorial-copy", settingsHandler.SaveEditorialCopy)
 
 	// AI discovery candidates and sources routes
 	mux.HandleFunc("GET /api/candidates", articleHandler.ListCandidates)

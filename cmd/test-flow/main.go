@@ -268,7 +268,7 @@ func main() {
 	}
 
 	// Verify Draft appears in Drafts list
-	drafts, err := articleService.ListArticles(ctx, "draft", "", "", 10)
+	drafts, _, err := articleService.ListArticlesPage(ctx, "draft", "", "", 10, 0)
 	if err != nil {
 		log.Printf("Warning querying drafts: %v", err)
 	} else {

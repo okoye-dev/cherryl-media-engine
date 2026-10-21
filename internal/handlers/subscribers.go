@@ -25,15 +25,21 @@ func (h *SubscriberHandler) ListSubscribers(w http.ResponseWriter, r *http.Reque
 	}
 
 	activeOnly := r.URL.Query().Get("activeOnly") == "true"
-	subs, err := h.store.ListSubscribers(r.Context(), activeOnly)
+	page := httputil.ParsePage(r, 25, 100)
+	subs, total, err := h.store.ListSubscribersPage(r.Context(), activeOnly, page.Size, page.Offset)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to list subscribers: "+err.Error())
 		return
 	}
 
+	httputil.SetPageHeaders(w, total, page)
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"subscribers": subs,
 		"count":       len(subs),
+		"total":       total,
+		"page":        page.Number,
+		"pageSize":    page.Size,
+		"totalPages":  page.TotalPages(total),
 	})
 }
 
