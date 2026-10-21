@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -15,19 +17,22 @@ import (
 
 // ArticleService defines the application service operations for articles.
 type ArticleService interface {
-	ListArticles(ctx context.Context, status, query, idsParam string, limit int) ([]models.Article, error)
+	// ListArticlesPage returns one page of articles and the total number that match.
+	ListArticlesPage(ctx context.Context, status, query, idsParam string, limit, offset int) ([]models.Article, int, error)
 	GetArticle(ctx context.Context, slugOrID string) (*models.Article, error)
 	SaveArticle(ctx context.Context, art *models.Article) (*models.Article, error)
+	// PatchArticle changes only the fields in patch. It returns the saved story and the names of the fields that really changed.
+	PatchArticle(ctx context.Context, slugOrID string, patch map[string]json.RawMessage) (*models.Article, []string, error)
 	PublishArticle(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error)
 	CheckSlug(ctx context.Context, slug, excludeID string) (bool, error)
 	ListTags(ctx context.Context, query string) ([]string, error)
 	ResolveLink(targetURL string) map[string]any
-	ListCandidates(ctx context.Context) ([]models.SuggestedStory, error)
+	ListCandidatesPage(ctx context.Context, limit, offset int) ([]models.SuggestedStory, int, error)
 	GetCandidate(ctx context.Context, id string) (*models.SuggestedStory, error)
 	ListSources(ctx context.Context) ([]models.Source, error)
 	SetFeatured(ctx context.Context, idOrSlug string, isFeatured bool) (*models.Article, error)
 	GetFeatured(ctx context.Context) (*models.Article, error)
-	SearchCuratedArticles(ctx context.Context, category, query, sort string, limit int) ([]models.Article, error)
+	SearchCuratedArticles(ctx context.Context, category, query, sort string, limit, offset int) ([]models.Article, int, error)
 	MediaResolver() MediaResolver
 }
 
@@ -57,36 +62,34 @@ func (s *articleService) MediaResolver() MediaResolver {
 	return s.resolver
 }
 
-func (s *articleService) ListArticles(ctx context.Context, status, query, idsParam string, limit int) ([]models.Article, error) {
+func (s *articleService) ListArticlesPage(ctx context.Context, status, query, idsParam string, limit, offset int) ([]models.Article, int, error) {
 	var articles []models.Article
+	var total int
 	var err error
 
-	if idsParam != "" {
+	switch {
+	case idsParam != "":
 		var rawIDs []string
 		for _, id := range strings.Split(idsParam, ",") {
-			trimmed := strings.TrimSpace(id)
-			if trimmed != "" {
+			if trimmed := strings.TrimSpace(id); trimmed != "" {
 				rawIDs = append(rawIDs, trimmed)
 			}
 		}
+		// A lookup by id is bounded by the ids asked for, so it is not paged.
 		articles, err = s.store.GetByIDs(ctx, rawIDs)
-	} else if query != "" {
-		if limit <= 0 {
-			limit = 20
-		}
-		articles, err = s.store.Search(ctx, query, limit)
-	} else {
-		articles, err = s.store.List(ctx, status)
+		total = len(articles)
+	case query != "":
+		articles, total, err = s.store.SearchPage(ctx, query, limit, offset)
+	default:
+		articles, total, err = s.store.ListPage(ctx, status, limit, offset)
 	}
-
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-
 	if s.resolver != nil {
 		s.resolver.ResolveArticles(articles)
 	}
-	return articles, nil
+	return articles, total, nil
 }
 
 func (s *articleService) GetArticle(ctx context.Context, slugOrID string) (*models.Article, error) {
@@ -149,6 +152,94 @@ func (s *articleService) SaveArticle(ctx context.Context, art *models.Article) (
 	}
 
 	return art, nil
+}
+
+// Fields a patch may never change. The id and creation time belong to the database.
+var immutableArticleFields = map[string]bool{"id": true, "createdAt": true}
+
+// ErrPatchRejected marks a patch that was refused for a reason the person can act on.
+var ErrPatchRejected = errors.New("patch rejected")
+
+func (s *articleService) PatchArticle(ctx context.Context, slugOrID string, patch map[string]json.RawMessage) (*models.Article, []string, error) {
+	cur, err := s.GetArticle(ctx, slugOrID)
+	if err != nil {
+		return nil, nil, err
+	}
+	curRaw, err := json.Marshal(cur)
+	if err != nil {
+		return nil, nil, err
+	}
+	merged := map[string]json.RawMessage{}
+	if err := json.Unmarshal(curRaw, &merged); err != nil {
+		return nil, nil, err
+	}
+
+	// Put in only what really differs from what is stored.
+	var changed []string
+	for k, v := range patch {
+		if immutableArticleFields[k] {
+			continue
+		}
+		if old, ok := merged[k]; ok && jsonEqual(old, v) {
+			continue
+		}
+		merged[k] = v
+		changed = append(changed, k)
+	}
+	sort.Strings(changed)
+	if len(changed) == 0 {
+		return cur, nil, nil
+	}
+
+	// Going live has its own checks (the cover photo must be uploaded), so a patch cannot skip them.
+	if raw, ok := patch["status"]; ok {
+		var st string
+		_ = json.Unmarshal(raw, &st)
+		if st == string(models.StatusPublished) && cur.Status != models.StatusPublished {
+			return nil, nil, fmt.Errorf("%w: use the publish step to take a story live", ErrPatchRejected)
+		}
+	}
+
+	mergedRaw, err := json.Marshal(merged)
+	if err != nil {
+		return nil, nil, err
+	}
+	var next models.Article
+	if err := json.Unmarshal(mergedRaw, &next); err != nil {
+		return nil, nil, fmt.Errorf("%w: a field has the wrong type: %v", ErrPatchRejected, err)
+	}
+	next.ID = cur.ID
+	next.CreatedAt = cur.CreatedAt
+
+	// A new slug renames the story. Save alone would create a second copy, so rename first.
+	if next.Slug != "" && next.Slug != cur.Slug {
+		ok, err := s.store.CheckSlugAvailable(ctx, next.Slug, cur.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !ok {
+			return nil, nil, fmt.Errorf("%w: the address %q is already used by another story", ErrPatchRejected, next.Slug)
+		}
+		if err := s.store.UpdateSlug(ctx, cur.ID, next.Slug); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	saved, err := s.SaveArticle(ctx, &next)
+	if err != nil {
+		return nil, nil, err
+	}
+	return saved, changed, nil
+}
+
+func jsonEqual(a, b json.RawMessage) bool {
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return string(a) == string(b)
+	}
+	xb, _ := json.Marshal(x)
+	yb, _ := json.Marshal(y)
+	return string(xb) == string(yb)
 }
 
 func (s *articleService) PublishArticle(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error) {
@@ -303,7 +394,7 @@ func (s *articleService) GetFeatured(ctx context.Context) (*models.Article, erro
 	return &fallback, nil
 }
 
-func (s *articleService) SearchCuratedArticles(ctx context.Context, category, query, sort string, limit int) ([]models.Article, error) {
+func (s *articleService) SearchCuratedArticles(ctx context.Context, category, query, sortBy string, limit, offset int) ([]models.Article, int, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -311,7 +402,7 @@ func (s *articleService) SearchCuratedArticles(ctx context.Context, category, qu
 	// Fetch all articles matching status
 	allArticles, err := s.store.List(ctx, "all")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	q := strings.ToLower(strings.TrimSpace(query))
@@ -338,32 +429,31 @@ func (s *articleService) SearchCuratedArticles(ctx context.Context, category, qu
 		filtered = append(filtered, art)
 	}
 
-	// Sort by recency (published_at DESC, or created_at DESC)
-	for i := 0; i < len(filtered)-1; i++ {
-		for j := i + 1; j < len(filtered); j++ {
-			tI := filtered[i].PublishedAt
-			if tI.IsZero() {
-				tI = filtered[i].CreatedAt
-			}
-			tJ := filtered[j].PublishedAt
-			if tJ.IsZero() {
-				tJ = filtered[j].CreatedAt
-			}
-			if tJ.After(tI) {
-				filtered[i], filtered[j] = filtered[j], filtered[i]
-			}
+	// Newest first (published date, or created date for drafts)
+	when := func(a models.Article) time.Time {
+		if a.PublishedAt.IsZero() {
+			return a.CreatedAt
 		}
+		return a.PublishedAt
 	}
+	sort.SliceStable(filtered, func(i, j int) bool { return when(filtered[i]).After(when(filtered[j])) })
 
-	if len(filtered) > limit {
-		filtered = filtered[:limit]
+	total := len(filtered)
+	if offset >= total {
+		filtered = []models.Article{}
+	} else {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		filtered = filtered[offset:end]
 	}
 
 	if s.resolver != nil {
 		s.resolver.ResolveArticles(filtered)
 	}
 
-	return filtered, nil
+	return filtered, total, nil
 }
 
 func (s *articleService) CheckSlug(ctx context.Context, slug, excludeID string) (bool, error) {
@@ -384,8 +474,8 @@ func (s *articleService) ResolveLink(targetURL string) map[string]any {
 	}
 }
 
-func (s *articleService) ListCandidates(ctx context.Context) ([]models.SuggestedStory, error) {
-	return s.store.ListCandidates(ctx)
+func (s *articleService) ListCandidatesPage(ctx context.Context, limit, offset int) ([]models.SuggestedStory, int, error) {
+	return s.store.ListCandidatesPage(ctx, limit, offset)
 }
 
 func (s *articleService) GetCandidate(ctx context.Context, id string) (*models.SuggestedStory, error) {

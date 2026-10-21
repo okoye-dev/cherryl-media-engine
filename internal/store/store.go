@@ -22,15 +22,22 @@ var ErrNotFound = errors.New("not found")
 
 type ArticleStore interface {
 	List(ctx context.Context, status string) ([]models.Article, error)
+	// ListPage returns one page of articles and the total number that match.
+	ListPage(ctx context.Context, status string, limit, offset int) ([]models.Article, int, error)
+	// SearchPage returns one page of search matches and the total number of matches.
+	SearchPage(ctx context.Context, query string, limit, offset int) ([]models.Article, int, error)
 	GetBySlug(ctx context.Context, slug string) (*models.Article, error)
 	GetByID(ctx context.Context, id string) (*models.Article, error)
 	GetByIDs(ctx context.Context, ids []string) ([]models.Article, error)
 	Search(ctx context.Context, query string, limit int) ([]models.Article, error)
 	Save(ctx context.Context, a *models.Article) error
+	// UpdateSlug renames a story's address without creating a copy.
+	UpdateSlug(ctx context.Context, id, newSlug string) error
 	Publish(ctx context.Context, idOrSlug string, publishedBy string) (*models.Article, error)
 	CheckSlugAvailable(ctx context.Context, slug string, excludeID string) (bool, error)
 	ListTags(ctx context.Context, query string) ([]string, error)
 	ListCandidates(ctx context.Context) ([]models.SuggestedStory, error)
+	ListCandidatesPage(ctx context.Context, limit, offset int) ([]models.SuggestedStory, int, error)
 	GetCandidate(ctx context.Context, id string) (*models.SuggestedStory, error)
 	SaveCandidate(ctx context.Context, s *models.SuggestedStory) error
 	ListSources(ctx context.Context) ([]models.Source, error)
@@ -62,6 +69,7 @@ type SectionStore interface {
 
 type SubscriberStore interface {
 	ListSubscribers(ctx context.Context, activeOnly bool) ([]models.PostSubscriber, error)
+	ListSubscribersPage(ctx context.Context, activeOnly bool, limit, offset int) ([]models.PostSubscriber, int, error)
 	AddSubscriber(ctx context.Context, email, name string, categories []string) (*models.PostSubscriber, error)
 	RemoveSubscriber(ctx context.Context, email string) error
 	RecordDispatches(ctx context.Context, articleID string, recipientEmails []string) error
@@ -111,6 +119,135 @@ func (s *PGStore) List(ctx context.Context, status string) ([]models.Article, er
 	defer rows.Close()
 
 	return scanArticleRows(rows)
+}
+
+// ListPage is List with a page size and offset, plus the total count.
+func (s *PGStore) ListPage(ctx context.Context, status string, limit, offset int) ([]models.Article, int, error) {
+	var where, order string
+	var args []any
+	switch status {
+	case "", "published":
+		where, order = " WHERE status = 'published' AND published_at <= NOW()", " ORDER BY published_at DESC"
+	case "all":
+		order = " ORDER BY created_at DESC"
+	default:
+		where, order, args = " WHERE status = $1", " ORDER BY created_at DESC", []any{status}
+	}
+	var total int
+	if err := s.pool.QueryRow(ctx, "SELECT count(*) FROM articles"+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count articles: %w", err)
+	}
+	n := len(args)
+	rows, err := s.pool.Query(ctx,
+		"SELECT "+articleSelectFields+" FROM articles"+where+order+fmt.Sprintf(" LIMIT $%d OFFSET $%d", n+1, n+2),
+		append(args, limit, offset)...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list articles page: %w", err)
+	}
+	defer rows.Close()
+	list, err := scanArticleRows(rows)
+	return list, total, err
+}
+
+// SearchPage is Search with an offset and the total number of matches.
+func (s *PGStore) SearchPage(ctx context.Context, query string, limit, offset int) ([]models.Article, int, error) {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return s.ListPage(ctx, "published", limit, offset)
+	}
+	pattern := "%" + trimmed + "%"
+	const cond = ` WHERE title ILIKE $1 OR kicker ILIKE $1 OR deck ILIKE $1 OR category ILIKE $1 OR excerpt ILIKE $1 OR subtitle ILIKE $1 OR $2 = ANY(tags)`
+	var total int
+	if err := s.pool.QueryRow(ctx, "SELECT count(*) FROM articles"+cond, pattern, trimmed).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count search: %w", err)
+	}
+	rows, err := s.pool.Query(ctx, "SELECT "+articleSelectFields+" FROM articles"+cond+" ORDER BY published_at DESC LIMIT $3 OFFSET $4", pattern, trimmed, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("search articles page: %w", err)
+	}
+	defer rows.Close()
+	list, err := scanArticleRows(rows)
+	return list, total, err
+}
+
+// ListCandidatesPage returns one page of AI leads (best first) and the total number of leads.
+func (s *PGStore) ListCandidatesPage(ctx context.Context, limit, offset int) ([]models.SuggestedStory, int, error) {
+	all, err := s.ListCandidates(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	return sliceCandidates(all, limit, offset), len(all), nil
+}
+
+// ListSubscribersPage returns one page of subscribers (newest first) and the total number.
+func (s *PGStore) ListSubscribersPage(ctx context.Context, activeOnly bool, limit, offset int) ([]models.PostSubscriber, int, error) {
+	where := ""
+	if activeOnly {
+		where = " WHERE active = true"
+	}
+	var total int
+	if err := s.pool.QueryRow(ctx, "SELECT count(*) FROM post_subscribers"+where).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx, "SELECT id::text, email, name, categories, active, created_at, updated_at FROM post_subscribers"+where+" ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	subs := []models.PostSubscriber{}
+	for rows.Next() {
+		var sub models.PostSubscriber
+		if err := rows.Scan(&sub.ID, &sub.Email, &sub.Name, &sub.Categories, &sub.Active, &sub.CreatedAt, &sub.UpdatedAt); err != nil {
+			return nil, 0, err
+		}
+		subs = append(subs, sub)
+	}
+	return subs, total, nil
+}
+
+func sliceCandidates(all []models.SuggestedStory, limit, offset int) []models.SuggestedStory {
+	if offset >= len(all) {
+		return []models.SuggestedStory{}
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end]
+}
+
+func sliceArticles(all []models.Article, limit, offset int) []models.Article {
+	if offset >= len(all) {
+		return []models.Article{}
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end]
+}
+
+func sliceSubscribers(all []models.PostSubscriber, limit, offset int) []models.PostSubscriber {
+	if offset >= len(all) {
+		return []models.PostSubscriber{}
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end]
+}
+
+// UpdateSlug changes one story's slug. Save alone would insert a second row when the slug changes.
+func (s *PGStore) UpdateSlug(ctx context.Context, id, newSlug string) error {
+	tag, err := s.pool.Exec(ctx, "UPDATE articles SET slug = $2, updated_at = NOW() WHERE id::text = $1", id, newSlug)
+	if err != nil {
+		return fmt.Errorf("update slug: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *PGStore) GetBySlug(ctx context.Context, slug string) (*models.Article, error) {
@@ -262,10 +399,10 @@ func (s *PGStore) Save(ctx context.Context, a *models.Article) error {
 		tags = []string{}
 	}
 
+	// A story with only a subtitle gets it as its summary. The reverse is not done: a story with only a
+	// summary keeps its subtitle empty (reading falls back to the summary), so the two fields stay separate.
 	if a.Subtitle != "" && a.Deck == "" {
 		a.Deck = a.Subtitle
-	} else if a.Deck != "" && a.Subtitle == "" {
-		a.Subtitle = a.Deck
 	}
 
 	err := s.pool.QueryRow(ctx, `
@@ -335,11 +472,11 @@ func (s *PGStore) ListCandidates(ctx context.Context) ([]models.SuggestedStory, 
 	var list []models.SuggestedStory
 	for rows.Next() {
 		var (
-			id, headline, category, status string
-			pitch, articleID               *string
-			relScore                       float64
+			id, headline, category, status    string
+			pitch, articleID                  *string
+			relScore                          float64
 			sourcesJSON, factsJSON, draftJSON []byte
-			createdAt                      time.Time
+			createdAt                         time.Time
 		)
 
 		err := rows.Scan(&id, &headline, &pitch, &category, &relScore, &sourcesJSON, &factsJSON, &draftJSON, &status, &articleID, &createdAt)
@@ -384,11 +521,11 @@ func (s *PGStore) GetCandidate(ctx context.Context, id string) (*models.Suggeste
 	`, id)
 
 	var (
-		cId, headline, category, status string
-		pitch, articleID               *string
-		relScore                       float64
+		cId, headline, category, status   string
+		pitch, articleID                  *string
+		relScore                          float64
 		sourcesJSON, factsJSON, draftJSON []byte
-		createdAt                      time.Time
+		createdAt                         time.Time
 	)
 
 	err := row.Scan(&cId, &headline, &pitch, &category, &relScore, &sourcesJSON, &factsJSON, &draftJSON, &status, &articleID, &createdAt)
@@ -819,13 +956,13 @@ func (s *PGStore) SaveSection(ctx context.Context, sectionKey string, articleIDs
 }
 
 type MemoryStore struct {
-	mu         sync.RWMutex
-	articles   map[string]models.Article
-	candidates map[string]models.SuggestedStory
-	sources    []models.Source
-	uploads    map[string]string
-	users      map[string]*auth.User
-	passwords  map[string]string
+	mu          sync.RWMutex
+	articles    map[string]models.Article
+	candidates  map[string]models.SuggestedStory
+	sources     []models.Source
+	uploads     map[string]string
+	users       map[string]*auth.User
+	passwords   map[string]string
 	settings    map[string][]byte
 	sections    map[string]models.CuratedSection
 	subscribers map[string]models.PostSubscriber
@@ -1074,6 +1211,50 @@ func (m *MemoryStore) List(ctx context.Context, status string) ([]models.Article
 		}
 	}
 	return res, nil
+}
+
+// ListPage is List with a page size and offset, newest first, plus the total count.
+func (m *MemoryStore) ListPage(ctx context.Context, status string, limit, offset int) ([]models.Article, int, error) {
+	all, _ := m.List(ctx, status)
+	sort.Slice(all, func(i, j int) bool { return all[i].PublishedAt.After(all[j].PublishedAt) })
+	return sliceArticles(all, limit, offset), len(all), nil
+}
+
+// SearchPage is Search with an offset and the total number of matches.
+func (m *MemoryStore) SearchPage(ctx context.Context, query string, limit, offset int) ([]models.Article, int, error) {
+	all, _ := m.Search(ctx, query, 1<<30)
+	sort.Slice(all, func(i, j int) bool { return all[i].PublishedAt.After(all[j].PublishedAt) })
+	return sliceArticles(all, limit, offset), len(all), nil
+}
+
+func (m *MemoryStore) ListCandidatesPage(ctx context.Context, limit, offset int) ([]models.SuggestedStory, int, error) {
+	all, err := m.ListCandidates(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	return sliceCandidates(all, limit, offset), len(all), nil
+}
+
+func (m *MemoryStore) ListSubscribersPage(ctx context.Context, activeOnly bool, limit, offset int) ([]models.PostSubscriber, int, error) {
+	all, err := m.ListSubscribers(ctx, activeOnly)
+	if err != nil {
+		return nil, 0, err
+	}
+	return sliceSubscribers(all, limit, offset), len(all), nil
+}
+
+func (m *MemoryStore) UpdateSlug(ctx context.Context, id, newSlug string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for slug, a := range m.articles {
+		if a.ID == id {
+			delete(m.articles, slug)
+			a.Slug = newSlug
+			m.articles[newSlug] = a
+			return nil
+		}
+	}
+	return ErrNotFound
 }
 
 func (m *MemoryStore) GetBySlug(ctx context.Context, slug string) (*models.Article, error) {
@@ -1436,4 +1617,3 @@ func (m *MemoryStore) ListDispatches(ctx context.Context, articleID string) ([]m
 	defer m.mu.RUnlock()
 	return m.dispatches[articleID], nil
 }
-
